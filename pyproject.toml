@@ -12,8 +12,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# lattice reduction for the starved-leak cells of the sweep (round-off path needs neither)
-lattice = ["fpylll>=0.6"]
+# lattice reduction + enumeration for the rest of the sweep (round-off path needs neither).
+# cysignals is a runtime import of fpylll that its wheels do not always pull in.
+lattice = ["fpylll>=0.6", "cysignals>=1.11"]
 # full json-schema validation (store/db falls back to required-field checks without it)
 schema = ["jsonschema>=4.0"]
 dev = ["pytest>=7.0"]

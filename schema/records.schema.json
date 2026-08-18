@@ -39,10 +39,12 @@
         "bits_per_call": {"type": "integer"},
         "num_observations": {"type": "integer"},
         "trials": {"type": "integer", "minimum": 0},
-        "successes": {"type": "integer", "minimum": 0},
+        "successes": {"type": "integer", "minimum": 0, "description": "trials with a UNIQUE, correct recovery (unique_candidate == ground truth)"},
         "method_used": {"enum": ["roundoff", "enumerate", "none"]},
         "median_ns": {"type": ["number", "null"]},
         "mean_margin": {"type": ["number", "null"], "description": "mean ||M.e||_inf; <0.5 => round-off safe"},
+        "mean_candidates": {"type": ["number", "null"], "description": "mean size of the box-consistent state set across scored trials; 1.0 = clean unique recovery, >1 = collisions (recoverability edge). The rule-8 uncertainty-as-range field."},
+        "outcome": {"enum": ["recovered", "ambiguous", "underdetermined", "gap", null], "description": "recovered = every scored trial uniquely resolved; ambiguous = collisions present (see mean_candidates); underdetermined = n*k<48, no unique state exists (information-theoretic, not a tooling limit); gap = required method not wired (see capability_gap)"},
         "capability_gap": {"type": ["string", "null"], "description": "populated INSTEAD of a score when a required method is unavailable; never leave a gap silent"}
       }
     },

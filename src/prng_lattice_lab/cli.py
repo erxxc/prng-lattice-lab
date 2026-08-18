@@ -50,19 +50,19 @@ def cmd_sweep(args) -> int:
                    "trials_per_cell": cfg.trials_per_cell, "seed": cfg.seed},
         "lab_version": __version__, "created_at": _now(),
     })
-    wired = 0
+    tally: dict[str, int] = {}
     for c in results:
         store.record_cell(run_id, {
             "bits_per_call": c.bits_per_call, "num_observations": c.num_observations,
             "trials": c.trials, "successes": c.successes, "method_used": c.method_used,
             "median_ns": c.median_ns, "mean_margin": c.mean_margin,
+            "mean_candidates": c.mean_candidates, "outcome": c.outcome,
             "capability_gap": c.capability_gap,
         })
-        if c.capability_gap is None:
-            wired += 1
+        tally[c.outcome or "?"] = tally.get(c.outcome or "?", 0) + 1
     store.close()
-    print(f"run {run_id}: {len(results)} cells ({wired} wired, "
-          f"{len(results) - wired} capability-gap) -> {args.db}")
+    summary = ", ".join(f"{n} {k}" for k, n in sorted(tally.items()))
+    print(f"run {run_id}: {len(results)} cells ({summary}) -> {args.db}")
     return 0
 
 

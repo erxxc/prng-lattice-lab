@@ -25,11 +25,15 @@ prng-lattice-lab report 1 --out report.md       # deterministic report from stor
 |---|---|
 | `java.util.Random` model + forward/back stepping | ✔ validated |
 | 3×nextFloat round-off cracker (Randar core) | ✔ validated (published vector) |
-| sweep driver + store + deterministic report | ✔ (1 wired cell, rest disclosed gaps) |
+| general-grid solver (fpylll box enumeration) | ✔ wired — full grid, complete enumeration |
+| sweep + store + deterministic report | ✔ recovered / ambiguous / underdetermined, 0 gaps with fpylll |
 | repoauditor `weak_rng_adapter` demonstration path | ✔ reuses validated cracker |
-| general-grid solver (fpylll + branch-and-bound) | ☐ specified, not wired |
-| odd-bound / bit-length leak models | ☐ specified |
+| odd-bound / bit-length leak models, non-consecutive leaks | ☐ specified |
 | detect-in-source half of the adapter | ☐ built inside repoauditor |
+
+Install the general solver with `pip install -e '.[lattice]'` (brings in
+`fpylll` + `cysignals`). Without it the round-off anchor still scores and the
+rest of the grid records honest capability gaps.
 
 See `CLAUDE.md` and `docs/scaffold.md` for the contracts, `docs/RESEARCH.md` for
 the plan and hypotheses.

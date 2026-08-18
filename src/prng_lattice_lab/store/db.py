@@ -50,9 +50,22 @@ class Store:
         self._migrate()
 
     def _migrate(self) -> None:
+        # Track applied migrations so append-only files (esp. ALTER TABLE, which
+        # SQLite cannot guard with IF NOT EXISTS) run exactly once per database.
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS _migrations ("
+            "filename TEXT PRIMARY KEY, applied_at TEXT NOT NULL)"
+        )
+        applied = {row[0] for row in self.conn.execute("SELECT filename FROM _migrations")}
         root = Path(__file__).resolve().parent / "migrations"
         for sql_file in sorted(root.glob("*.sql")):
+            if sql_file.name in applied:
+                continue
             self.conn.executescript(sql_file.read_text(encoding="utf-8"))
+            self.conn.execute(
+                "INSERT INTO _migrations(filename, applied_at) VALUES (?, datetime('now'))",
+                (sql_file.name,),
+            )
         self.conn.commit()
 
     def record_sweep_run(self, run: dict) -> int:
@@ -68,18 +81,20 @@ class Store:
         _validate("SweepCell", cell)
         self.conn.execute(
             "INSERT INTO sweep_cell(run_id, bits_per_call, num_observations, trials, "
-            "successes, method_used, median_ns, mean_margin, capability_gap) "
-            "VALUES (?,?,?,?,?,?,?,?,?)",
+            "successes, method_used, median_ns, mean_margin, mean_candidates, outcome, "
+            "capability_gap) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (run_id, cell["bits_per_call"], cell["num_observations"], cell["trials"],
              cell["successes"], cell["method_used"], cell.get("median_ns"),
-             cell.get("mean_margin"), cell.get("capability_gap")),
+             cell.get("mean_margin"), cell.get("mean_candidates"), cell.get("outcome"),
+             cell.get("capability_gap")),
         )
         self.conn.commit()
 
     def list_cells(self, run_id: int) -> list[dict]:
         cur = self.conn.execute(
             "SELECT bits_per_call, num_observations, trials, successes, method_used, "
-            "median_ns, mean_margin, capability_gap FROM sweep_cell WHERE run_id=? "
+            "median_ns, mean_margin, mean_candidates, outcome, capability_gap "
+            "FROM sweep_cell WHERE run_id=? "
             "ORDER BY bits_per_call, num_observations", (run_id,))
         cols = [d[0] for d in cur.description]
         return [dict(zip(cols, row)) for row in cur.fetchall()]

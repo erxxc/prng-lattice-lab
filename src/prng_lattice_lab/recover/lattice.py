@@ -3,27 +3,38 @@ General lattice construction and reduction for arbitrary (num_observations,
 bits_per_call). recover/roundoff.py is the hard-coded 3xnextFloat special case;
 this module is what the sweep uses to reach the rest of the phase diagram.
 
-Design:
-  build_basis(n)      -> the n-dimensional basis rows [(1,a,...,a^(n-1)); m*I_(n-1)]
-  reduce(basis)       -> LLL/BKZ reduced basis + unimodular transform (via fpylll)
-  solve_box(...)      -> given per-coordinate [lo, hi] measurement bounds, return
-                         the internal state(s) consistent with them:
-                           * round-off when the reduced box is tiny (margin << 0.5)
-                           * branch-and-bound (recover/enumerate.py) otherwise
+Geometry (consecutive TOP_BITS leak, call_stride==1):
+  The unknown is x = s_1, the java.util.Random state immediately AFTER the first
+  observed call (roundoff.py returns the same quantity; step_back(x) is the pre-
+  call state). Successive states are s_{1+t} = a^t * x + o_t (mod 2**48), with the
+  affine offset o_t = b*(a^{t-1}+...+a+1). Observing the top k bits of s_{1+t}
+  pins s_{1+t} to an interval of width w = 2**(48-k); subtracting o_t moves that
+  interval onto lattice coordinate t. Recovery is therefore a box-CVP on the
+  lattice spanned by build_basis(n).
 
-fpylll is an OPTIONAL dependency. For the validated 3-float path the lab does not
-need it (roundoff.py is self-contained). It becomes required only for the starved
--leak cells of the sweep. Import is therefore deferred and its absence is a
-recorded capability limit, never a silent fallback to fake results.
+  build_basis(n)      -> rows [(1,a,...,a^(n-1)); m*I on coords 1..n-1]
+  reduce(basis)       -> LLL-reduced rows (via fpylll)
+  solve_box(bounds)   -> every lattice point in the per-coordinate box:
+                           * one point  -> unique recovery (round-off regime)
+                           * several    -> genuine collisions (recoverability edge)
+                           * none       -> inconsistent (garbage guard)
+
+fpylll is an OPTIONAL dependency. The validated 3-float path (roundoff.py) needs
+neither fpylll nor this module. fpylll becomes required only for the rest of the
+sweep; its import is deferred and its absence is a recorded capability gap, never
+a silent fallback to fake results.
 
 CITATIONS:
-  * LLL: Lenstra, Lenstra, Lovász (1982).
+  * LLL: Lenstra, Lenstra, Lovasz (1982).
   * Application to java.util.Random: mjtb49/LattiCG; Earthcomputer/JavaRandomReverser.
   * Reduced-basis-as-round-off framing: spawnmason/randar-explanation, "Worked example".
 """
 from __future__ import annotations
 
-from prng_lattice_lab.lcg import A, MASK
+import numpy as np
+
+from prng_lattice_lab.lcg import A, B, MASK, step, step_back
+from prng_lattice_lab.recover.enumerate import enumerate_box
 
 # The LLL-reduced basis for the 3-float java.util.Random lattice, kept here in
 # full (roundoff.py keeps only first components). Reference value; any fpylll run
@@ -37,27 +48,28 @@ REDUCED_BASIS_3 = (
 MODULUS = MASK + 1  # 2**48
 
 
+class ReductionUnavailable(RuntimeError):
+    """Raised when a lattice-reduction backend is required but not installed."""
+
+
 def build_basis(n: int) -> list[list[int]]:
     """Basis rows for the n-observation consecutive-call lattice.
 
-    Row 0:   (1, a, a^2, ..., a^(n-1))
+    Row 0:       (1, a, a^2, ..., a^(n-1))   -- exact integer powers (large by
+                 design; LLL shrinks them). Reducing them mod m would give the
+                 same lattice, since coords 1..n-1 carry a full m on the diagonal.
     Rows 1..n-1: m on the diagonal (the modular wrap on each later coordinate).
 
-    This omits the affine offset o = (0, b, a*b+b, ...); callers subtract o from
-    the measurement target before solving (see solve_box). Consecutive calls
-    only (call_stride==1); strided/gapped observations compose a with itself
-    `stride` times per step -- TODO when the sweep needs non-consecutive leaks.
+    Omits the affine offset o_t; callers fold it into the box (see top_bits_bounds).
+    Consecutive calls only; strided observations would compose a with itself
+    `stride` times per step -- deferred until the sweep needs non-consecutive leaks.
     """
-    rows: list[list[int]] = []
-    first = [pow(A, k, MODULUS) if k > 0 else 1 for k in range(n)]
-    # note: first row uses true a^k (not reduced) so the lattice is exact; the
-    # entries are large by design and LLL shrinks them.
     first = [1]
     acc = 1
-    for _k in range(1, n):
-        acc = acc * A
+    for _ in range(1, n):
+        acc *= A
         first.append(acc)
-    rows.append(first)
+    rows: list[list[int]] = [first]
     for i in range(1, n):
         row = [0] * n
         row[i] = MODULUS
@@ -65,40 +77,135 @@ def build_basis(n: int) -> list[list[int]]:
     return rows
 
 
-def reduce(basis: list[list[int]]):
-    """Return (reduced_basis, transform) via LLL. Requires fpylll.
+def reduce(basis: list[list[int]]) -> list[list[int]]:
+    """LLL-reduce a basis, returning its rows. Requires fpylll.
 
     Raises ReductionUnavailable if fpylll is not installed, so the sweep records
     an explicit capability gap for the affected cells rather than inventing data.
     """
     try:
-        from fpylll import IntegerMatrix, LLL  # type: ignore
+        from fpylll import LLL, IntegerMatrix  # type: ignore
     except ImportError as exc:  # pragma: no cover - environment dependent
         raise ReductionUnavailable(
             "fpylll not installed; only the roundoff 3-float path is available. "
-            "Install fpylll to characterise starved-leak cells."
+            "Install fpylll to characterise the rest of the phase diagram."
         ) from exc
-    mat = IntegerMatrix.from_matrix(basis)
-    reduced = LLL.reduction(mat)
-    return reduced, None
+    mat = IntegerMatrix.from_matrix([[int(x) for x in row] for row in basis])
+    LLL.reduction(mat)
+    return [[int(mat[i, j]) for j in range(mat.ncols)] for i in range(mat.nrows)]
 
 
-def solve_box(bounds: list[tuple[int, int]], method: str = "auto") -> list[int]:
-    """Given per-coordinate measurement bounds [(lo0,hi0), ...], return internal
-    states consistent with all of them.
+# --- reduced-basis cache (the reduced basis depends only on n) ------------------
+_REDUCED: dict[int, list[list[int]]] = {}
+_MINV: dict[int, np.ndarray] = {}
 
-    NOT YET IMPLEMENTED for the general case. The validated 3-float path lives in
-    recover/roundoff.py; wire this to fpylll + recover/enumerate.py during the
-    Sat-PM "generalise with a real lattice library" step. Contract:
-      * returns [] when no consistent state exists (garbage input),
-      * returns the unique state when the box is tight (round-off regime),
-      * returns all candidates when the box admits several (starved regime).
+
+def reduced_basis(n: int) -> list[list[int]]:
+    """LLL-reduced basis rows for n observations (cached)."""
+    if n not in _REDUCED:
+        _REDUCED[n] = reduce(build_basis(n))
+    return _REDUCED[n]
+
+
+def _round_off_transform(n: int) -> np.ndarray:
+    """M = (R^T)^-1 for the reduced basis R: the change into reduced-basis
+    coordinates used by both the margin and Babai round-off (z = M @ target)."""
+    if n not in _MINV:
+        R = np.array(reduced_basis(n), dtype=float)
+        _MINV[n] = np.linalg.inv(R.T)
+    return _MINV[n]
+
+
+def affine_offsets(n: int) -> list[int]:
+    """o_t for t=0..n-1: o_0=0, o_t = a*o_{t-1} + b (mod 2**48). The offset folded
+    out of coordinate t so the box sits on the pure a^t * x term."""
+    offs = [0]
+    for _ in range(1, n):
+        offs.append((A * offs[-1] + B) % MODULUS)
+    return offs
+
+
+def top_bits_bounds(observations: list[int], bits_per_call: int) -> list[tuple[int, int]]:
+    """Per-coordinate half-open box [lo_t, hi_t) implied by a TOP_BITS leak.
+
+    Coordinate t = s_{1+t} - o_t, and top-k bits == observations[t] pins
+    s_{1+t} to [y*w, y*w + w) with w = 2**(48-k); subtracting o_t gives the box.
     """
-    raise NotImplementedError(
-        "General box solver pending fpylll wiring. Use recover.roundoff for the "
-        "3-consecutive-nextFloat case, which is complete and validated."
-    )
+    w = 1 << (48 - bits_per_call)
+    offs = affine_offsets(len(observations))
+    return [(y * w - offs[t], y * w - offs[t] + w) for t, y in enumerate(observations)]
 
 
-class ReductionUnavailable(RuntimeError):
-    """Raised when a lattice-reduction backend is required but not installed."""
+def margin_top_bits(observations: list[int], bits_per_call: int) -> float:
+    """Generalised round-off safety margin ||M.e||_inf for a TOP_BITS measurement.
+
+    Matches recover.roundoff.margin on the (24, 3) cell and extends it to any
+    (bits_per_call, num_observations). The <0.5 crossing is the round-off /
+    enumeration boundary the sweep exists to draw.
+    """
+    n = len(observations)
+    w = 1 << (48 - bits_per_call)
+    half = 1 << (47 - bits_per_call)
+    offs = affine_offsets(n)
+    target = np.array([y * w + half - offs[t] for t, y in enumerate(observations)], dtype=float)
+    z = _round_off_transform(n) @ target
+    return float(np.max(np.abs(z - np.rint(z))))
+
+
+def solve_box(
+    bounds: list[tuple[int, int]],
+    *,
+    method: str = "auto",
+    node_budget: int = 1_000_000,
+) -> list[int]:
+    """Given per-coordinate boxes [(lo0,hi0), ...], return the first coordinates
+    (candidate x = s_1 states) of every lattice point consistent with all of them.
+
+      * [] when no consistent point exists (garbage input),
+      * one element when the box is tight (round-off regime),
+      * several when the box admits collisions (starved / edge regime).
+
+    method="roundoff" takes the single Babai round-off point (fast, no uniqueness
+    guarantee); method="enumerate"/"auto" enumerates the box completely (and so
+    can certify uniqueness vs. ambiguity). Raises recover.enumerate.BudgetExceeded
+    if completeness cannot be certified within node_budget.
+    """
+    n = len(bounds)
+    rows = reduced_basis(n)
+    if method == "roundoff":
+        centers = np.array([(lo + hi) / 2.0 for lo, hi in bounds], dtype=float)
+        z = np.rint(_round_off_transform(n) @ centers)
+        vec = [int(sum(int(z[i]) * rows[i][j] for i in range(n))) for j in range(n)]
+        if all(lo <= vec[j] < hi for j, (lo, hi) in enumerate(bounds)):
+            return [vec[0] & MASK]
+        return []
+    vecs = enumerate_box(rows, bounds, node_budget=node_budget)
+    return sorted({v[0] & MASK for v in vecs})
+
+
+def recover_pre_states_top_bits(
+    observations: list[int],
+    bits_per_call: int,
+    *,
+    node_budget: int = 1_000_000,
+) -> list[int]:
+    """Every pre-call state (s_0) consistent with a consecutive TOP_BITS leak.
+
+    Complete: one element is a unique recovery; more than one flags genuine
+    collisions (the leak does not distinguish those states). Each candidate is
+    re-stepped through the LCG as a garbage guard before it is returned.
+    """
+    bounds = top_bits_bounds(observations, bits_per_call)
+    shift = 48 - bits_per_call
+    pre: set[int] = set()
+    for x in solve_box(bounds, node_budget=node_budget):
+        s = x
+        ok = True
+        for y in observations:
+            if (s >> shift) != y:
+                ok = False
+                break
+            s = step(s)
+        if ok:
+            pre.add(step_back(x))
+    return sorted(pre)

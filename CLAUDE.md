@@ -22,13 +22,18 @@ token-generation idioms fall on the exploitable side?
 
 ```
 generate/ ─▶ recover/ ─▶ sweep/ ─▶ characterize/ ─▶ (report/  | adapt/)
- leak models  lattice     grid       margin+calib     deterministic  repoauditor
+ leak models  lattice*    grid       margin+calib†    deterministic  repoauditor
  + harness    roundoff*   driver                       report        fold-in
-              lattice†
-              enumerate†
+              enumerate*
 ```
 
 `*` complete and validated · `†` specified, not yet wired.
+
+The general solver (`recover/lattice.solve_box` + `recover/enumerate.enumerate_box`)
+is now wired: with `fpylll` present the sweep scores the whole grid, classifying
+each cell as recovered / ambiguous (genuine collisions at the recoverability edge)
+/ underdetermined (n·k < 48). Without `fpylll` only the round-off anchor scores and
+the rest record honest capability gaps.
 
 ## Non-negotiables (inherited from repoauditor; keep them identical so the fold-in is native)
 
@@ -52,8 +57,11 @@ generate/ ─▶ recover/ ─▶ sweep/ ─▶ characterize/ ─▶ (report/  | 
    falsification-confirmed result — here, the corroborating source is a reproducible
    recovery demonstration, not a prior.
 7. **No faked results; honest baselines only.** A cell with no wired method records
-   an explicit `capability_gap`, never a skipped or invented score. The sweep today
-   is 1 wired cell + 48 disclosed gaps — that is correct and honest, not a failure.
+   an explicit `capability_gap`, never a skipped or invented score. With `fpylll`
+   present the sweep now scores the whole grid (recovered / ambiguous /
+   underdetermined, 0 gaps); without it only the round-off anchor scores and the
+   rest are disclosed gaps. Both states are correct and honest — the gap is a
+   function of the environment, never a hidden failure.
 8. **Uncertainty pauses, it does not self-resolve.** Where a result is ambiguous
    (enumeration budget exhausted, multiple candidate states), raise rather than pick
    silently. Uncertainty is always reported as a range, never collapsed to one number.
@@ -66,10 +74,19 @@ generate/ ─▶ recover/ ─▶ sweep/ ─▶ characterize/ ─▶ (report/  | 
 crack_three_floats_msb(7338710, 7668738, 5563335) == 123123123123123
 ```
 
-Any change to `lcg.py` transition constants or bit-extraction, or to
-`recover/roundoff.py`'s reduced-basis constants, must keep this passing. If you
-touch the lattice math, re-run `pytest` before anything else. The round-trip
-property test (3000 trials, exact-leak → 100% recovery) is the other guardrail.
+`tests/test_lattice.py` pins it a second way — through the general solver — and
+also pins two properties the general path must not break: `fpylll` on
+`build_basis(3)` reproduces `REDUCED_BASIS_3` (so the general path stays tied to
+the validated round-off constants), and box enumeration is **complete** (the true
+state is always in the returned set; ambiguity is never silently collapsed).
+
+Any change to `lcg.py` transition constants or bit-extraction, to
+`recover/roundoff.py`'s reduced-basis constants, or to `recover/lattice.py`'s
+construction (`build_basis` / offsets / the round-off transform), must keep these
+passing. If you touch the lattice math, re-run `pytest` before anything else. The
+round-trip property test (3000 trials, exact-leak → 100% recovery) is the other
+guardrail. `test_lattice`/`test_sweep` skip without `fpylll`; `test_lcg`,
+`test_roundoff`, `test_store` are the fpylll-free core gate.
 
 ## The repoauditor fold-in — rules of engagement
 
@@ -90,7 +107,11 @@ property test (3000 trials, exact-leak → 100% recovery) is the other guardrail
 
 This is a **weekend harness with a clean fold-in seam**, not a second product.
 Known temptations to defer, not chase mid-session:
-- Wiring `recover/lattice.solve_box` + `recover/enumerate` for the whole grid.
+- ~~Wiring `recover/lattice.solve_box` + `recover/enumerate` for the whole grid.~~
+  **Done** (2026-08-18) — the general solver is wired and the sweep scores the full
+  grid honestly. Enumeration is fpylll's complete box enumeration; the `nextint_odd`
+  / `bit_length` leak models and non-consecutive (`call_stride>1`) geometries remain
+  deferred.
 - The `nextint_odd` (elttam) and `bit_length` (Minerva) leak models.
 - Full Randar coordinate inversion (Woodland-region math) — out of scope unless the
   goal changes to a full reproduction.
@@ -110,9 +131,11 @@ into breadth, stop and record the item in `docs/RESEARCH.md` backlog instead.
 5. `adapt/weak_rng_adapter.demonstrate_from_msb24` produces a verifiable
    next/prev-token demonstration for the clean case.
 
-Explicitly deferred beyond this DoD: general-grid solver, odd-bound & bit-length
-leak models, noise injection, MT19937 comparison, live narrative synthesis,
-in-repoauditor detection.
+The general-grid solver (originally deferred beyond this DoD) is now wired — the
+sweep draws the full phase boundary and reports the recoverability edge as a
+candidate-count range. Still explicitly deferred: odd-bound & bit-length leak
+models, non-consecutive observations, noise injection, MT19937 comparison, live
+narrative synthesis, in-repoauditor detection.
 
 ## Commands
 

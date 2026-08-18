@@ -1,0 +1,7 @@
+{
+  "description": "Published Randar worked-example vector (spawnmason/randar-explanation, 'Worked example').",
+  "internal_state_post_first_step": 123123123123123,
+  "nextfloat_msb24": [7338710, 7668738, 5563335],
+  "nextfloats": [0.4374212, 0.4570924, 0.3316006],
+  "source": "https://github.com/spawnmason/randar-explanation#worked-example"
+}

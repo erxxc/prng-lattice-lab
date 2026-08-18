@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prng-lattice-lab/records.schema.json",
+  "title": "prng-lattice-lab record schemas",
+  "description": "Schema-first source of truth for every record the lab persists or emits. store/db.py validates writes against this; report/synthesis.py re-validates on read. Code conforms to this file, never the reverse.",
+  "$defs": {
+    "GeneratorSpec": {
+      "type": "object",
+      "required": ["kind", "seeded_via"],
+      "properties": {
+        "kind": {"type": "string", "description": "generator identity, e.g. java.util.Random"},
+        "seeded_via": {"enum": ["internal_state", "constructor"]},
+        "world_seed": {"type": ["integer", "null"], "description": "only for full Randar coordinate inversion"}
+      }
+    },
+    "LeakProfile": {
+      "type": "object",
+      "required": ["model", "bits_per_call", "num_observations"],
+      "properties": {
+        "model": {"enum": ["top_bits", "nextint_odd", "bit_length"]},
+        "bits_per_call": {"type": "integer", "minimum": 1, "maximum": 48},
+        "num_observations": {"type": "integer", "minimum": 1},
+        "call_stride": {"type": "integer", "minimum": 1, "default": 1}
+      }
+    },
+    "SweepRun": {
+      "type": "object",
+      "required": ["config", "lab_version", "created_at"],
+      "properties": {
+        "config": {"type": "object"},
+        "lab_version": {"type": "string"},
+        "created_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "SweepCell": {
+      "type": "object",
+      "required": ["bits_per_call", "num_observations", "trials", "successes", "method_used"],
+      "properties": {
+        "bits_per_call": {"type": "integer"},
+        "num_observations": {"type": "integer"},
+        "trials": {"type": "integer", "minimum": 0},
+        "successes": {"type": "integer", "minimum": 0},
+        "method_used": {"enum": ["roundoff", "enumerate", "none"]},
+        "median_ns": {"type": ["number", "null"]},
+        "mean_margin": {"type": ["number", "null"], "description": "mean ||M.e||_inf; <0.5 => round-off safe"},
+        "capability_gap": {"type": ["string", "null"], "description": "populated INSTEAD of a score when a required method is unavailable; never leave a gap silent"}
+      }
+    },
+    "RecoveryDemonstration": {
+      "type": "object",
+      "description": "Reproducible corroborating evidence that licenses a severity upgrade in repoauditor. Not a prior, not an opinion.",
+      "required": ["observations_used", "recovered_state_present"],
+      "properties": {
+        "observations_used": {"type": "integer", "minimum": 0},
+        "recovered_state_present": {"type": "boolean"},
+        "predicted_next": {"type": "array", "items": {"type": "integer"}},
+        "predicted_prev": {"type": "array", "items": {"type": "integer"}},
+        "verified": {"type": "boolean", "description": "predictions matched held-back ground truth"}
+      }
+    },
+    "Citation": {
+      "type": "object",
+      "required": ["source", "locator"],
+      "properties": {
+        "source": {"type": "string"},
+        "locator": {"type": "string"},
+        "note": {"type": "string"}
+      }
+    },
+    "WeakRngCandidateFinding": {
+      "type": "object",
+      "description": "The record the fold-in emits into repoauditor's detect->triage flow. Mirrors CandidateFinding + an RNG demonstration payload. Severity is deliberately ABSENT: repoauditor's normalize/adjudicate owns and licenses severity.",
+      "required": ["rule_id", "message", "trust_boundary", "recoverability", "citations"],
+      "properties": {
+        "rule_id": {"type": "string"},
+        "message": {"type": "string"},
+        "location_placeholder": {"type": "string"},
+        "trust_boundary": {"type": "string"},
+        "recoverability": {"enum": ["proven", "likely", "possible"]},
+        "citations": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/Citation"}},
+        "demonstration": {"oneOf": [{"$ref": "#/$defs/RecoveryDemonstration"}, {"type": "null"}]}
+      }
+    }
+  }
+}

@@ -26,14 +26,52 @@ records which prompt version produced it (reproducibility "as of" block).
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from prng_lattice_lab.characterize import calibration, margin
 
 
+def _validate_cells(cells: list[dict], schema_path: str) -> None:
+    """Re-validate every stored cell against SweepCell before it is trusted into a
+    deliverable. The store validates on write; this is the read-side re-check the
+    report contract promises, so a hand-edited DB cannot smuggle a malformed row
+    into a report. Full validation via jsonschema when available; a required-field
+    fallback (mirroring store/db.py) otherwise. Fails loud on the first bad cell.
+    """
+    with open(schema_path, "r", encoding="utf-8") as fh:
+        schema = json.load(fh)
+    try:
+        subschema = schema["$defs"]["SweepCell"]
+    except KeyError as exc:
+        raise ValueError(f"schema {schema_path} has no $defs.SweepCell") from exc
+
+    try:
+        import jsonschema
+        validator = jsonschema.Draft202012Validator(subschema)
+    except ImportError:
+        validator = None
+    required = subschema.get("required", [])
+
+    for i, cell in enumerate(cells):
+        label = (f"cell bits={cell['bits_per_call']} obs={cell['num_observations']}"
+                 if isinstance(cell, dict) and "bits_per_call" in cell and "num_observations" in cell
+                 else f"cell #{i}")
+        if validator is not None:
+            errors = sorted(validator.iter_errors(cell), key=lambda e: list(e.path))
+            if errors:
+                raise ValueError(f"{label} fails SweepCell schema: {errors[0].message}")
+        else:
+            missing = [k for k in required if k not in cell]
+            if missing:
+                raise ValueError(f"{label} missing required SweepCell fields: {missing}")
+
+
 def render_markdown(cells: list[dict], *, schema_path: str, run_meta: dict) -> str:
     """Build the deterministic report body from stored cells. No model, no prose
-    beyond fixed captions -- every number here traces to a SweepCell."""
+    beyond fixed captions -- every number here traces to a SweepCell (re-validated
+    against `schema_path` on entry, per the report's read-time contract)."""
+    _validate_cells(cells, schema_path)
     lines: list[str] = []
     lines.append("# Recoverability of java.util.Random under partial-state leakage\n")
     lines.append(f"_Run {run_meta.get('run_id')} · lab v{run_meta.get('lab_version')} "

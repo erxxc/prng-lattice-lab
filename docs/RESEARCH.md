@@ -35,8 +35,13 @@ common Java token-generation idioms fall on the exploitable side?
    budget-bounded. (Noise-injection / true starved-HNP enumeration still pending.)
 4. Sweep the grid; record success rate, timing, method, margin, and candidate-count
    per cell (`sweep/grid.py` + `store/`). ✔ full grid scored.
-5. Characterise: margin curve + calibration coverage against the exact oracle
-   (`characterize/`). ☐ models pending.
+5. Characterise: margin surface/boundary + calibration coverage against the exact
+   oracle (`characterize/`). ✔ done. The ideal-hash null — P(unique)=0 for n·k<48,
+   exp(−2^(48−n·k)) above — is covered (95% Wilson) for the whole over/under-determined
+   grid; the only cells it misses are the n·k=48 edge, where the structured LCG
+   collides differently than a random hash (k=16×3 recovers *more* than the null,
+   k=24×2 *less*). Mean margin stays below 0.5 across the measured grid, so uniqueness
+   (H1), not round-off (H2), is the operative recovery limiter there.
 6. Applied layer: map the recoverable region to real Java idioms
    (session tokens, reset codes, CSRF/nonces) and, for the clean case, demonstrate
    next/prev token prediction (`adapt/weak_rng_adapter`). ✔ demonstration path.

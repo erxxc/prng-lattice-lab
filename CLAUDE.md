@@ -22,7 +22,7 @@ token-generation idioms fall on the exploitable side?
 
 ```
 generate/ ─▶ recover/ ─▶ sweep/ ─▶ characterize/ ─▶ (report/  | adapt/)
- leak models  lattice*    grid       margin+calib†    deterministic  repoauditor
+ leak models  lattice*    grid       margin+calib*    deterministic  repoauditor
  + harness    roundoff*   driver                       report        fold-in
               enumerate*
 ```

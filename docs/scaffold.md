@@ -79,10 +79,19 @@ config (typed)  ─▶  generate/  ─▶  recover/  ─▶  sweep/  ─▶  sto
 - `CellResult` now also carries `mean_candidates` and `outcome`. `run_sweep` returns
   one `CellResult` per grid cell.
 
-### `characterize/`  — hooks in place, models pending
-- `margin.margin_curve` — aggregates per-cell margins, locates the 0.5 crossing.
-- `calibration.predict/coverage` — the exact-oracle calibration transfer target for
-  repoauditor risk-quant session G. Pending.
+### `characterize/`  — complete (read projections over stored cells)
+- `margin.margin_surface` / `margin_curve` — the full 2-D margin surface (the old
+  bits-only keying was lossy). `margin.roundoff_boundary` — locates the mean-margin
+  0.5 crossing per observation count, and reports honestly when it does not cross
+  within the measured grid (as on the default grid, where round-off is mean-safe
+  throughout and uniqueness is the limiter).
+- `calibration.predict` — modelled P(unique recovery) under the ideal-hash null
+  (0 for n·k<48; exp(−2^(48−n·k)) above). `calibration.coverage` — the exact-oracle
+  coverage test (Wilson interval; the transfer target for repoauditor risk-quant
+  session G): the null covers the over/under-determined regions perfectly and the
+  n·k=48 edge is where it and the structured LCG disagree. Plus `reliability_table`,
+  `recovery_by_total_bits` (H1 edge), `recovery_boundary`. All accept `CellResult`
+  objects or `store.list_cells` dict rows.
 
 ### `store/db.py`  — sole DB owner, minimal but real
 - SQLite. `record_sweep_run`, `record_cell`, `list_cells`. Validates every write
@@ -92,8 +101,9 @@ config (typed)  ─▶  generate/  ─▶  recover/  ─▶  sweep/  ─▶  sto
 ### `report/synthesis.py`  — deterministic render complete; prose pending
 - `render_markdown` — pure read projection over stored cells: phase grid (unique-
   recovery rate), margin grid, the recoverability-edge table (ambiguous cells and
-  their candidate-count range), the underdetermined-region note, and disclosed gaps.
-  No model, every number traces to a `SweepCell`.
+  their candidate-count range), the H1 recoverability boundary and the exact-oracle
+  calibration/coverage section (both via `characterize/`), the underdetermined-region
+  note, and disclosed gaps. No model, every number traces to a `SweepCell`.
 - `synthesize_narrative(prompt_path=...)` — LLM prose hook; loads the versioned
   prompt, tags output with its version. Not wired (no key assumed).
 - Takes `schema` and `prompt` as explicit inputs (the requested contract).
@@ -131,3 +141,6 @@ were added in migration `0002`; the store tracks applied migrations in a
   at n·k=48; the node-budget guard raises rather than truncating.
 - Grid classifies cells honestly and the store's migrations are idempotent
   (`test_sweep.py`, `test_store.py`).
+- characterize: the ideal-hash null covers the over/under-determined regions exactly
+  and the coverage test flags the n·k=48 edge deviation; margin surface/boundary and
+  the H1 aggregates behave (`test_characterize.py`).

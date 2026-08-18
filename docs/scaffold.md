@@ -100,7 +100,10 @@ config (typed)  ─▶  generate/  ─▶  recover/  ─▶  sweep/  ─▶  sto
 
 ### `adapt/`  — contract complete; detect half pending
 - `contract.py` — mirror of repoauditor's `CandidateFinding` + `RecoveryDemonstration`.
-  Severity deliberately absent.
+  **Verified against the live contract 2026-08-18** (repoauditor `detect/ensemble.py`
+  + `matching.py`); corrections tracked as repoauditor OPT-036. Note the earlier
+  "severity absent" premise was wrong: the adapter proposes a conservative INITIAL
+  severity; repoauditor's normalize owns upgrades (licensed by the demonstration).
 - `weak_rng_adapter.demonstrate_from_msb24` — complete (reuses validated roundoff),
   produces next/prev-token predictions as corroborating evidence.
 - `weak_rng_adapter.detect_in_source` — pending; built inside repoauditor.

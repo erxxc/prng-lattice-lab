@@ -22,6 +22,7 @@ from prng_lattice_lab.adapt.contract import (
     Citation,
     RecoverabilityClass,
     RecoveryDemonstration,
+    Severity,
     WeakRngCandidateFinding,
 )
 from prng_lattice_lab.lcg import JavaRandom, step
@@ -70,26 +71,36 @@ def demonstrate_from_msb24(observations: list[int], predict_k: int = 3) -> Recov
     )
 
 
-def build_finding(rule_id: str, trust_boundary: str, location_placeholder: str,
-                  demonstration: RecoveryDemonstration | None) -> WeakRngCandidateFinding:
-    """Assemble the candidate finding repoauditor's detect->triage flow consumes.
+def build_finding(*, title: str, file: str, line_start: int, line_end: int,
+                  citation_snippet: str, trust_boundary_ref: str | None = None,
+                  identity_key: str | None = None,
+                  demonstration: RecoveryDemonstration | None = None) -> WeakRngCandidateFinding:
+    """Assemble the candidate finding repoauditor's detect->triage flow consumes,
+    in the corrected CandidateFinding shape (concrete location, source_tool,
+    confidence, identity_key).
 
-    Recoverability class is set from whether a live demonstration succeeded; it
-    does NOT set severity (repoauditor owns that).
+    The adapter proposes a conservative INITIAL severity; it never upgrades it --
+    repoauditor's normalize/adjudicate owns upgrades, and the RecoveryDemonstration
+    is offered as the independent corroborating source that may license one.
     """
-    if demonstration and demonstration.recovered_state_present:
-        rc = RecoverabilityClass.PROVEN
-    else:
-        rc = RecoverabilityClass.LIKELY
+    proven = bool(demonstration and demonstration.recovered_state_present)
     return WeakRngCandidateFinding(
-        rule_id=rule_id,
-        message="Predictable RNG in a security context; internal state recoverable "
-                "from observed outputs.",
-        location_placeholder=location_placeholder,
-        trust_boundary=trust_boundary,
-        recoverability=rc,
-        citations=[_RANDAR_CITE],
+        title=title,
+        file=file,
+        line_start=line_start,
+        line_end=line_end,
+        citation_snippet=citation_snippet,
+        confidence=0.9 if proven else 0.5,
+        severity=Severity.MEDIUM,          # conservative initial; normalize owns upgrades
+        source_tool="weak_rng",
+        identity_key=identity_key,
+        trust_boundary_ref=trust_boundary_ref,
+        rationale=("Predictable RNG in a security context; internal state recoverable "
+                   "from observed outputs."
+                   + (" Recovery demonstrated (next/prev tokens predicted)." if proven else "")),
+        recoverability=RecoverabilityClass.PROVEN if proven else RecoverabilityClass.LIKELY,
         demonstration=demonstration,
+        citations=[_RANDAR_CITE],
     )
 
 

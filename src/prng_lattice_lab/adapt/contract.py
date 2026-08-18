@@ -2,25 +2,42 @@
 The repoauditor fold-in boundary.
 
 This module mirrors -- deliberately, at arm's length -- the shape repoauditor's
-detect stage expects from a deterministic adapter (the CandidateFinding contract
-its sast_adapter / sca_adapter / secrets_adapter satisfy). It does NOT import
-repoauditor. The lab stays standalone; when this graduates, the real adapter is
-built inside repoauditor against its own live contract, using this as the spec.
+detect stage expects from a deterministic adapter (its `CandidateFinding`, which
+the sast/sca/secrets adapters satisfy). It does NOT import repoauditor. The lab
+stays standalone; when this graduates, the real adapter is built inside
+repoauditor against its own live, pydantic-validated contract, using this as the
+spec.
 
-Why a mirror and not a dependency: keeps the weekend harness runnable on its own,
-and forces the contract to be written down explicitly so drift is visible in
-review. The repoauditor CLAUDE.md non-negotiables that this must honour:
-  * every finding carries citations
-  * severity is never upgraded without an independent corroborating source OR a
-    falsification-confirmed result -- here, the corroborating source is a live
-    recovery DEMONSTRATION (recover next/prev tokens), which is reproducible
-    evidence, not a prior
-  * findings are ranked/suppressed, never deleted
-  * no unsourced priors
+VERIFIED 2026-08-18 against repoauditor `src/repoauditor/detect/ensemble.py`
+(`CandidateFinding`) and `src/repoauditor/matching.py`. The earlier snapshot had
+drifted; corrections applied here (tracked as repoauditor OPT-036,
+`docs/optimizations/opt-036-weak-rng-adapter.md`):
 
-VERIFY BEFORE FOLD-IN: re-read repoauditor's actual CandidateFinding definition
-and matching.py contract at graduation time; treat the fields below as a snapshot
-that may be stale.
+  * The live `CandidateFinding` is a pydantic `BaseModel` with field validation;
+    this dataclass is a standalone-runnable stand-in for it.
+  * Location is CONCRETE (`file`, `line_start`, `line_end`, `citation_snippet`),
+    not a single placeholder -- repoauditor's retrieval layer supplies it.
+  * It carries `severity` (required). The previous "severity intentionally absent"
+    reading was WRONG: deterministic adapters set a conservative INITIAL severity
+    (SAST uses `sarif_severity`). What the adapter must not do is *upgrade* it --
+    `normalize/adjudicate` owns upgrades, licensed by an independent corroborating
+    source or a falsification pass. Here that corroborating source is the
+    reproducible `RecoveryDemonstration`.
+  * `identity_key` is matching.py's strongest signal ("natural_identity"); set it
+    so dedup/corroboration behave.
+  * `confidence` (0..1) and `source_tool` are required; `trust_boundary_ref` is an
+    optional reference into the map, not a free-text label.
+
+Non-negotiables this must still honour (repoauditor CLAUDE.md): every finding
+carries a citation; severity is never upgraded without independent corroboration
+or falsification; findings are ranked/suppressed, never deleted; no unsourced priors.
+
+OPEN DESIGN DECISION (see OPT-036): the RNG-specific evidence below
+(`recoverability`, `demonstration`, `citations`) has NO field on the upstream
+`CandidateFinding`. It rides alongside here. In repoauditor it either compresses
+into `rationale` + `confidence` with the demonstration persisted as a separate
+evidence artifact (no schema change), or becomes a first-class store record via a
+migration. Start with the former; propose the latter only if adjudication needs it.
 """
 from __future__ import annotations
 
@@ -28,8 +45,19 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 
+class Severity(str, Enum):
+    """Mirror of repoauditor's `store.models.Severity` (a StrEnum upstream).
+    The adapter proposes a conservative INITIAL value; normalize owns upgrades."""
+    INFO = "info"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
 class RecoverabilityClass(str, Enum):
-    """How exposed a located weak-RNG usage is."""
+    """How exposed a located weak-RNG usage is. RNG-specific evidence, not a
+    field of the upstream CandidateFinding."""
     PROVEN = "proven"            # state recovered + forward/backward tokens demonstrated
     LIKELY = "likely"            # idiom matches a known-recoverable pattern, no live demo run
     POSSIBLE = "possible"        # predictable generator in a security context, needs analyst review
@@ -37,8 +65,7 @@ class RecoverabilityClass(str, Enum):
 
 @dataclass(frozen=True)
 class Citation:
-    """Everything a finding asserts must trace to a source. Mirrors the
-    citations repoauditor attaches to every finding."""
+    """Everything a finding asserts must trace to a source."""
     source: str                  # e.g. "spawnmason/randar-explanation" or a demo-run id
     locator: str                 # section / URL / demonstration artifact path
     note: str = ""
@@ -46,8 +73,8 @@ class Citation:
 
 @dataclass(frozen=True)
 class RecoveryDemonstration:
-    """The corroborating evidence that licenses a severity upgrade. This is a
-    reproducible artifact, not an opinion: given N observed outputs, the recovered
+    """The corroborating evidence that licenses a severity upgrade in normalize.
+    Reproducible artifact, not an opinion: given N observed outputs, the recovered
     state predicts these next-K and prior-K outputs, verified against held-back
     ground truth."""
     observations_used: int
@@ -59,21 +86,26 @@ class RecoveryDemonstration:
 
 @dataclass(frozen=True)
 class WeakRngCandidateFinding:
-    """The record the fold-in emits into repoauditor's detect->triage flow.
+    """Mirror of repoauditor's `CandidateFinding` (detect/ensemble.py) plus the
+    RNG-specific evidence payload.
 
-    Mirror of repoauditor's CandidateFinding shape (rule id, location, message,
-    trust-boundary tag, citations) plus the RNG-specific demonstration payload
-    that acts as the corroborating source.
+    The first block mirrors the live contract field-for-field. The trailing block
+    is RNG-specific evidence with no home on the upstream model (see OPT-036).
     """
-    rule_id: str                 # e.g. "weak-rng/session-token-java-util-random"
-    message: str
-    # location is a placeholder in the standalone lab; repoauditor supplies the
-    # real (path, line, snippet) from its retrieval layer.
-    location_placeholder: str
-    trust_boundary: str          # e.g. "auth", "reset-flow", "csrf-token"
-    recoverability: RecoverabilityClass
-    citations: list[Citation]
+    # --- mirror of the live CandidateFinding (required fields) ---
+    title: str
+    file: str
+    line_start: int
+    line_end: int
+    citation_snippet: str
+    confidence: float            # 0..1; proven demo -> high, pattern-only -> lower
+    severity: Severity           # conservative INITIAL value; normalize owns upgrades
+    # --- mirror (optional / defaulted) ---
+    source_tool: str = "weak_rng"
+    identity_key: str | None = None      # matching.py "natural_identity" -- set it
+    trust_boundary_ref: str | None = None  # reference into the map, not free text
+    rationale: str | None = None
+    # --- RNG-specific evidence riding alongside (no upstream field; see OPT-036) ---
+    recoverability: RecoverabilityClass = RecoverabilityClass.LIKELY
     demonstration: RecoveryDemonstration | None = None
-    # severity is intentionally ABSENT: repoauditor's normalize/adjudicate owns
-    # severity and its corroboration-licensing rule. The adapter proposes evidence,
-    # it does not assign or upgrade severity.
+    citations: list[Citation] = field(default_factory=list)

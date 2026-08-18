@@ -95,10 +95,15 @@ guardrail. `test_lattice`/`test_sweep` skip without `fpylll`; `test_lcg`,
   imports this. Keeping them decoupled is deliberate: the lab must run standalone,
   and the contract must be written down so drift is caught in review.
 - At graduation, **re-read repoauditor's real `CandidateFinding` and `matching.py`
-  contract** — treat `adapt/contract.py` as a possibly-stale snapshot. The DETECT
-  half (`detect_in_source`) is built inside repoauditor against its live retrieval
-  layer, using `adapt/contract.py` as the spec. The DEMONSTRATE half already reuses
-  the validated `recover/roundoff` path, so the fold-in inherits the passing vector.
+  contract** — treat `adapt/contract.py` as a possibly-stale snapshot. **Done
+  2026-08-18**: the re-read found real drift (concrete location, required `severity`,
+  `identity_key`, `confidence`, `source_tool`); `adapt/contract.py` is corrected and
+  the fold-in is proposed as repoauditor **OPT-036** (`docs/optimizations/opt-036-weak-rng-adapter.md`
+  in that repo), deferred pending owner approval — not yet built, per repoauditor's
+  scope governance. The DETECT half (`detect_in_source`) is built inside repoauditor
+  against its live retrieval layer, using `adapt/contract.py` as the spec. The
+  DEMONSTRATE half already reuses the validated `recover/roundoff` path, so the
+  fold-in inherits the passing vector.
 - The adapter's job is the middle branch of the taxonomy: a *shared/predictable
   generator crossing a trust boundary*. That is invisible to SAST, dependency
   scanning, and CVE feeds — the whole reason it is worth adding.

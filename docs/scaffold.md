@@ -116,6 +116,9 @@ config (typed)  ─▶  generate/  ─▶  recover/  ─▶  sweep/  ─▶  sto
   severity; repoauditor's normalize owns upgrades (licensed by the demonstration).
 - `weak_rng_adapter.demonstrate_from_msb24` — complete (reuses validated roundoff),
   produces next/prev-token predictions as corroborating evidence.
+- `weak_rng_adapter.reconstruct_stream` / `demonstrate_retroactive` — complete: a
+  captured 3-token window reconstructs the ENTIRE issued stream (tokens before the
+  window included), verified against ground truth (`prng-lattice-lab retro`).
 - `weak_rng_adapter.detect_in_source` — pending; built inside repoauditor.
 
 ## Store schema (records)

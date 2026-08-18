@@ -16,6 +16,7 @@ pip install -e .
 pytest -q                                       # correctness gate (8 tests)
 prng-lattice-lab validate                       # Randar published vector
 prng-lattice-lab demo 7338710 7668738 5563335   # crack + predict next/prev tokens
+prng-lattice-lab retro --total 20 --offset 10   # reconstruct a whole token stream from one captured window
 prng-lattice-lab sweep --trials 200             # run the phase-diagram grid
 prng-lattice-lab report 1 --out report.md       # deterministic report from stored run
 ```

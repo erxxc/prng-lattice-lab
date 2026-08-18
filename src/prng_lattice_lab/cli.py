@@ -99,6 +99,27 @@ def cmd_demo(args) -> int:
     return 0 if demo.recovered_state_present else 1
 
 
+def cmd_retro(args) -> int:
+    import random
+
+    from prng_lattice_lab.adapt import weak_rng_adapter
+    if args.offset + 3 > args.total or args.offset < 0:
+        print("offset must be >=0 and leave room for a 3-token window (offset+3 <= total)",
+              file=sys.stderr)
+        return 2
+    state = random.Random(args.seed).getrandbits(48)
+    demo = weak_rng_adapter.demonstrate_retroactive(state, args.total, args.offset)
+    print(json.dumps({
+        "observations_used": demo.observations_used,
+        "recovered": demo.recovered_state_present,
+        "verified": demo.verified,
+        "retroactive_tokens_recovered": len(demo.predicted_prev),
+        "forward_tokens_recovered": len(demo.predicted_next),
+        "retroactive_sample": demo.predicted_prev[:5],
+    }, indent=2))
+    return 0 if (demo.recovered_state_present and demo.verified) else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="prng-lattice-lab", description=__doc__)
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -124,6 +145,13 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("demo", help="crack three nextFloat MSBs and predict next/prev")
     sp.add_argument("msb", nargs=3, help="three top-24-bit measurements")
     sp.set_defaults(func=cmd_demo)
+
+    sp = sub.add_parser("retro", help="retroactively reconstruct a whole token stream "
+                                      "from one captured 3-token window (verified)")
+    sp.add_argument("--total", type=int, default=20, help="tokens the generator issues")
+    sp.add_argument("--offset", type=int, default=10, help="stream index of the captured window")
+    sp.add_argument("--seed", type=int, default=0, help="seed picking the hidden internal state")
+    sp.set_defaults(func=cmd_retro)
     return p
 
 

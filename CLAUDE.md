@@ -149,6 +149,7 @@ prng-lattice-lab validate                         # Randar vector sanity
 prng-lattice-lab sweep --trials 200               # run the grid, persist run+cells
 prng-lattice-lab report <run_id> --schema ... --prompt ... --out report.md
 prng-lattice-lab demo 7338710 7668738 5563335     # crack + predict next/prev
+prng-lattice-lab retro --total 20 --offset 10     # reconstruct a whole stream from one 3-token window
 pytest -q                                         # correctness gate
 ```
 

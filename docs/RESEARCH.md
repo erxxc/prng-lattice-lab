@@ -62,7 +62,11 @@ appendix (run id, seed, trial count, lab + prompt versions).
 - Non-consecutive observations (`call_stride>1`): compose `a` with itself per step.
 - Noise injection → force enumeration → bridge to real side-channel data.
 - MT19937 comparison victim (624-output exact inversion; same capability, different math).
-- Retroactive demonstration: recover "past" tokens from a captured sequence.
+- ~~Retroactive demonstration: recover "past" tokens from a captured sequence.~~
+  **Done 2026-08-18** (`weak_rng_adapter.reconstruct_stream` /
+  `demonstrate_retroactive`; `prng-lattice-lab retro` CLI). A captured 3-token window
+  reconstructs the entire issued stream, tokens BEFORE the window included, verified
+  against ground truth.
 - Full Randar coordinate inversion (Woodland-region math) — only if the goal
   changes to a full reproduction.
 

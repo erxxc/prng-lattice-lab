@@ -25,7 +25,7 @@ from prng_lattice_lab.adapt.contract import (
     Severity,
     WeakRngCandidateFinding,
 )
-from prng_lattice_lab.lcg import JavaRandom, step
+from prng_lattice_lab.lcg import JavaRandom, step, step_back
 from prng_lattice_lab.recover import roundoff
 
 _RANDAR_CITE = Citation(
@@ -58,7 +58,6 @@ def demonstrate_from_msb24(observations: list[int], predict_k: int = 3) -> Recov
     pre = roundoff.recover_pre_call_state(m1, m2, m3)
     predicted_prev = []
     if pre is not None:
-        from prng_lattice_lab.lcg import step_back
         s = pre
         for _ in range(predict_k):
             s = step_back(s)
@@ -68,6 +67,65 @@ def demonstrate_from_msb24(observations: list[int], predict_k: int = 3) -> Recov
         observations_used=3, recovered_state_present=True,
         predicted_next=predicted_next, predicted_prev=predicted_prev,
         verified=False,  # caller verifies against held-back outputs
+    )
+
+
+def reconstruct_stream(window: list[int], offset: int, total_length: int) -> list[int] | None:
+    """Reconstruct an ENTIRE stream of nextFloat top-24-bit tokens from a 3-token
+    window captured at position `offset`.
+
+    `window` are three consecutive observed tokens; token at stream index `offset`
+    is `window[0]`. Returns the full `[token_0, ..., token_{total_length-1}]`,
+    including every token issued BEFORE the window (retroactive recovery) and after
+    it. Returns None if the window is inconsistent with any LCG run (garbage guard).
+
+    This is the concrete predictable-token threat: capturing a handful of consecutive
+    tokens exposes the whole history and future of the generator. Uses the validated
+    round-off cracker, so it needs no lattice backend.
+    """
+    if len(window) < 3 or offset < 0 or offset + 3 > total_length:
+        return None
+    s1 = roundoff.crack_three_floats_msb(window[0], window[1], window[2])
+    if s1 is None:  # inconsistent window (e.g. not from consecutive nextFloat calls)
+        return None
+    recon = [0] * total_length
+    # s1 is the state AFTER the call that produced window[0] (== token at `offset`).
+    s = s1
+    for i in range(offset, total_length):     # the window onward
+        recon[i] = s >> 24
+        s = step(s)
+    s = s1
+    for i in range(offset - 1, -1, -1):        # everything issued earlier
+        s = step_back(s)
+        recon[i] = s >> 24
+    return recon
+
+
+def demonstrate_retroactive(true_pre_stream_state: int, total_tokens: int,
+                            window_offset: int, window_size: int = 3) -> RecoveryDemonstration:
+    """Self-contained, VERIFIED retroactive demonstration.
+
+    A java.util.Random at a known internal state issues `total_tokens` nextFloat
+    top-24-bit tokens. An attacker who captures only a `window_size`-token window at
+    `window_offset` recovers the state and reconstructs every token -- crucially the
+    ones issued BEFORE the window. `verified` is set from an exact check against the
+    issued stream, so this is reproducible evidence, not a claim.
+
+    `predicted_prev` carries the retroactively recovered earlier tokens (in stream
+    order); `predicted_next` the later ones.
+    """
+    gen = JavaRandom.from_internal_state(true_pre_stream_state)
+    issued = [gen.next(24) for _ in range(total_tokens)]
+    window = issued[window_offset:window_offset + window_size]
+    recon = reconstruct_stream(window, window_offset, total_tokens)
+    if recon is None:
+        return RecoveryDemonstration(observations_used=window_size, recovered_state_present=False)
+    return RecoveryDemonstration(
+        observations_used=window_size,
+        recovered_state_present=True,
+        predicted_prev=recon[:window_offset],                       # issued BEFORE the window
+        predicted_next=recon[window_offset + window_size:],         # issued AFTER the window
+        verified=(recon == issued),
     )
 
 

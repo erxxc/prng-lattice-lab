@@ -87,13 +87,13 @@ def _roundoff_anchor(trials, n_trials: int) -> CellResult:
     )
 
 
-def _underdetermined_cell(trials, n_trials: int, k: int, n: int) -> CellResult:
+def _underdetermined_cell(trials, n_trials: int, k: int, n: int, call_stride: int) -> CellResult:
     """n*k < 48: fewer leaked bits than the 48-bit secret, so by pigeonhole the
     leak does not determine a unique state. No recovery is attempted; the margin
     is still recorded (when fpylll is present) because it illustrates that a small
     margin is necessary but NOT sufficient without enough total bits."""
     try:
-        margins = [lattice.margin_top_bits(t.observations, k) for t in trials]
+        margins = [lattice.margin_top_bits(t.observations, k, call_stride) for t in trials]
         mean_margin = _mean(margins)
     except lattice.ReductionUnavailable:
         mean_margin = None
@@ -104,7 +104,7 @@ def _underdetermined_cell(trials, n_trials: int, k: int, n: int) -> CellResult:
     )
 
 
-def _general_cell(trials, n_trials: int, k: int, n: int) -> CellResult:
+def _general_cell(trials, n_trials: int, k: int, n: int, call_stride: int) -> CellResult:
     """n*k >= 48: enumerate the box completely per trial and classify."""
     successes = 0
     ambiguous = 0
@@ -114,10 +114,11 @@ def _general_cell(trials, n_trials: int, k: int, n: int) -> CellResult:
     margins: list[float] = []
     cand_counts: list[int] = []
     for t in trials:
-        margins.append(lattice.margin_top_bits(t.observations, k))
+        margins.append(lattice.margin_top_bits(t.observations, k, call_stride))
         start = time.perf_counter_ns()
         try:
-            candidates = lattice.recover_pre_states_top_bits(t.observations, k)
+            candidates = lattice.recover_pre_states_top_bits(
+                t.observations, k, call_stride=call_stride)
         except BudgetExceeded:
             times.append(time.perf_counter_ns() - start)
             budget_hit += 1
@@ -156,17 +157,17 @@ def _general_cell(trials, n_trials: int, k: int, n: int) -> CellResult:
 
 def run_cell(profile: LeakProfile, trials_per_cell: int, method: RecoverMethod, seed: int) -> CellResult:
     trials = make_trials(profile, trials_per_cell, seed=seed)
-    if profile.model is not LeakModel.TOP_BITS or profile.call_stride != 1:
+    if profile.model is not LeakModel.TOP_BITS:
         return _gap_cell(profile, trials_per_cell,
-                         "only consecutive TOP_BITS wired (nextint_odd / bit_length / strided pending)")
+                         "only TOP_BITS wired (nextint_odd / bit_length leak models pending)")
 
-    k, n = profile.bits_per_call, profile.num_observations
-    if k == 24 and n == 3:
-        return _roundoff_anchor(trials, trials_per_cell)
+    k, n, stride = profile.bits_per_call, profile.num_observations, profile.call_stride
+    if k == 24 and n == 3 and stride == 1:
+        return _roundoff_anchor(trials, trials_per_cell)   # validated fpylll-free path
     if k * n < SECRET_BITS:
-        return _underdetermined_cell(trials, trials_per_cell, k, n)
+        return _underdetermined_cell(trials, trials_per_cell, k, n, stride)
     try:
-        return _general_cell(trials, trials_per_cell, k, n)
+        return _general_cell(trials, trials_per_cell, k, n, stride)
     except lattice.ReductionUnavailable:
         return _gap_cell(profile, trials_per_cell,
                          "fpylll not installed; general solver unavailable (round-off anchor still scores)")

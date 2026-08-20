@@ -52,22 +52,23 @@ class ReductionUnavailable(RuntimeError):
     """Raised when a lattice-reduction backend is required but not installed."""
 
 
-def build_basis(n: int) -> list[list[int]]:
-    """Basis rows for the n-observation consecutive-call lattice.
+def build_basis(n: int, multiplier: int = A) -> list[list[int]]:
+    """Basis rows for the n-observation lattice at a given per-step multiplier.
 
-    Row 0:       (1, a, a^2, ..., a^(n-1))   -- exact integer powers (large by
-                 design; LLL shrinks them). Reducing them mod m would give the
-                 same lattice, since coords 1..n-1 carry a full m on the diagonal.
+    Row 0:       (1, g, g^2, ..., g^(n-1))   -- exact integer powers of the per-step
+                 multiplier g (large by design; LLL shrinks them). Reducing them mod
+                 m would give the same lattice, since coords 1..n-1 carry a full m on
+                 the diagonal.
     Rows 1..n-1: m on the diagonal (the modular wrap on each later coordinate).
 
-    Omits the affine offset o_t; callers fold it into the box (see top_bits_bounds).
-    Consecutive calls only; strided observations would compose a with itself
-    `stride` times per step -- deferred until the sweep needs non-consecutive leaks.
+    `multiplier` is the LCG multiplier between consecutive OBSERVED states: a for
+    consecutive calls, a^stride for strided observations (call_stride>1). Omits the
+    affine offset o_t; callers fold it into the box (see top_bits_bounds).
     """
     first = [1]
     acc = 1
     for _ in range(1, n):
-        acc *= A
+        acc *= multiplier
         first.append(acc)
     rows: list[list[int]] = [first]
     for i in range(1, n):
@@ -75,6 +76,18 @@ def build_basis(n: int) -> list[list[int]]:
         row[i] = MODULUS
         rows.append(row)
     return rows
+
+
+def strided_lcg(call_stride: int) -> tuple[int, int]:
+    """(multiplier, addend) of java.util.Random's LCG advanced `call_stride` steps:
+    state -> a^s * state + b*(a^(s-1) + ... + a + 1)  (mod 2**48). For call_stride=1
+    this is exactly (A, B), so every strided path collapses to the consecutive one."""
+    if call_stride < 1:
+        raise ValueError("call_stride must be >= 1")
+    addend = 0
+    for _ in range(call_stride):
+        addend = (A * addend + B) % MODULUS
+    return pow(A, call_stride, MODULUS), addend
 
 
 def reduce(basis: list[list[int]]) -> list[list[int]]:
@@ -95,66 +108,75 @@ def reduce(basis: list[list[int]]) -> list[list[int]]:
     return [[int(mat[i, j]) for j in range(mat.ncols)] for i in range(mat.nrows)]
 
 
-# --- reduced-basis cache (the reduced basis depends only on n) ------------------
-_REDUCED: dict[int, list[list[int]]] = {}
-_MINV: dict[int, np.ndarray] = {}
+# --- reduced-basis cache (the reduced basis depends on n and the call stride) ---
+_REDUCED: dict[tuple[int, int], list[list[int]]] = {}
+_MINV: dict[tuple[int, int], np.ndarray] = {}
 
 
-def reduced_basis(n: int) -> list[list[int]]:
-    """LLL-reduced basis rows for n observations (cached)."""
-    if n not in _REDUCED:
-        _REDUCED[n] = reduce(build_basis(n))
-    return _REDUCED[n]
+def reduced_basis(n: int, call_stride: int = 1) -> list[list[int]]:
+    """LLL-reduced basis rows for n observations at the given call stride (cached)."""
+    key = (n, call_stride)
+    if key not in _REDUCED:
+        multiplier, _ = strided_lcg(call_stride)
+        _REDUCED[key] = reduce(build_basis(n, multiplier))
+    return _REDUCED[key]
 
 
-def _round_off_transform(n: int) -> np.ndarray:
+def _round_off_transform(n: int, call_stride: int = 1) -> np.ndarray:
     """M = (R^T)^-1 for the reduced basis R: the change into reduced-basis
     coordinates used by both the margin and Babai round-off (z = M @ target)."""
-    if n not in _MINV:
-        R = np.array(reduced_basis(n), dtype=float)
-        _MINV[n] = np.linalg.inv(R.T)
-    return _MINV[n]
+    key = (n, call_stride)
+    if key not in _MINV:
+        R = np.array(reduced_basis(n, call_stride), dtype=float)
+        _MINV[key] = np.linalg.inv(R.T)
+    return _MINV[key]
 
 
-def affine_offsets(n: int) -> list[int]:
-    """o_t for t=0..n-1: o_0=0, o_t = a*o_{t-1} + b (mod 2**48). The offset folded
-    out of coordinate t so the box sits on the pure a^t * x term."""
+def affine_offsets(n: int, call_stride: int = 1) -> list[int]:
+    """o_t for t=0..n-1 between OBSERVED states: o_0=0, o_t = g*o_{t-1} + c (mod
+    2**48), where (g, c) is the LCG advanced `call_stride` steps. The offset folded
+    out of coordinate t so the box sits on the pure g^t * x term."""
+    multiplier, addend = strided_lcg(call_stride)
     offs = [0]
     for _ in range(1, n):
-        offs.append((A * offs[-1] + B) % MODULUS)
+        offs.append((multiplier * offs[-1] + addend) % MODULUS)
     return offs
 
 
-def top_bits_bounds(observations: list[int], bits_per_call: int) -> list[tuple[int, int]]:
+def top_bits_bounds(observations: list[int], bits_per_call: int,
+                    call_stride: int = 1) -> list[tuple[int, int]]:
     """Per-coordinate half-open box [lo_t, hi_t) implied by a TOP_BITS leak.
 
-    Coordinate t = s_{1+t} - o_t, and top-k bits == observations[t] pins
-    s_{1+t} to [y*w, y*w + w) with w = 2**(48-k); subtracting o_t gives the box.
+    Coordinate t = s_{1+t*stride} - o_t, and top-k bits == observations[t] pins that
+    state to [y*w, y*w + w) with w = 2**(48-k); subtracting the strided offset o_t
+    gives the box.
     """
     w = 1 << (48 - bits_per_call)
-    offs = affine_offsets(len(observations))
+    offs = affine_offsets(len(observations), call_stride)
     return [(y * w - offs[t], y * w - offs[t] + w) for t, y in enumerate(observations)]
 
 
-def margin_top_bits(observations: list[int], bits_per_call: int) -> float:
+def margin_top_bits(observations: list[int], bits_per_call: int,
+                    call_stride: int = 1) -> float:
     """Generalised round-off safety margin ||M.e||_inf for a TOP_BITS measurement.
 
-    Matches recover.roundoff.margin on the (24, 3) cell and extends it to any
-    (bits_per_call, num_observations). The <0.5 crossing is the round-off /
-    enumeration boundary the sweep exists to draw.
+    Matches recover.roundoff.margin on the (24, 3) consecutive cell and extends it to
+    any (bits_per_call, num_observations, call_stride). The <0.5 crossing is the
+    round-off / enumeration boundary the sweep exists to draw.
     """
     n = len(observations)
     w = 1 << (48 - bits_per_call)
     half = 1 << (47 - bits_per_call)
-    offs = affine_offsets(n)
+    offs = affine_offsets(n, call_stride)
     target = np.array([y * w + half - offs[t] for t, y in enumerate(observations)], dtype=float)
-    z = _round_off_transform(n) @ target
+    z = _round_off_transform(n, call_stride) @ target
     return float(np.max(np.abs(z - np.rint(z))))
 
 
 def solve_box(
     bounds: list[tuple[int, int]],
     *,
+    call_stride: int = 1,
     method: str = "auto",
     node_budget: int = 1_000_000,
 ) -> list[int]:
@@ -165,16 +187,17 @@ def solve_box(
       * one element when the box is tight (round-off regime),
       * several when the box admits collisions (starved / edge regime).
 
-    method="roundoff" takes the single Babai round-off point (fast, no uniqueness
-    guarantee); method="enumerate"/"auto" enumerates the box completely (and so
-    can certify uniqueness vs. ambiguity). Raises recover.enumerate.BudgetExceeded
-    if completeness cannot be certified within node_budget.
+    `call_stride` selects the per-step multiplier (a^stride) so strided observations
+    reuse the same machinery. method="roundoff" takes the single Babai round-off
+    point (fast, no uniqueness guarantee); method="enumerate"/"auto" enumerates the
+    box completely (and so can certify uniqueness vs. ambiguity). Raises
+    recover.enumerate.BudgetExceeded if completeness cannot be certified.
     """
     n = len(bounds)
-    rows = reduced_basis(n)
+    rows = reduced_basis(n, call_stride)
     if method == "roundoff":
         centers = np.array([(lo + hi) / 2.0 for lo, hi in bounds], dtype=float)
-        z = np.rint(_round_off_transform(n) @ centers)
+        z = np.rint(_round_off_transform(n, call_stride) @ centers)
         vec = [int(sum(int(z[i]) * rows[i][j] for i in range(n))) for j in range(n)]
         if all(lo <= vec[j] < hi for j, (lo, hi) in enumerate(bounds)):
             return [vec[0] & MASK]
@@ -187,25 +210,31 @@ def recover_pre_states_top_bits(
     observations: list[int],
     bits_per_call: int,
     *,
+    call_stride: int = 1,
     node_budget: int = 1_000_000,
 ) -> list[int]:
-    """Every pre-call state (s_0) consistent with a consecutive TOP_BITS leak.
+    """Every pre-call state (s_0) consistent with a TOP_BITS leak, consecutive
+    (call_stride=1) or strided (>1, i.e. every stride-th call observed).
 
     Complete: one element is a unique recovery; more than one flags genuine
     collisions (the leak does not distinguish those states). Each candidate is
-    re-stepped through the LCG as a garbage guard before it is returned.
+    re-stepped through the LCG as a garbage guard -- advancing `call_stride` steps
+    between observations -- before it is returned. The pre-call state is always one
+    step back from the first observed state, regardless of stride.
     """
-    bounds = top_bits_bounds(observations, bits_per_call)
+    bounds = top_bits_bounds(observations, bits_per_call, call_stride)
     shift = 48 - bits_per_call
     pre: set[int] = set()
-    for x in solve_box(bounds, node_budget=node_budget):
+    for x in solve_box(bounds, call_stride=call_stride, node_budget=node_budget):
         s = x
         ok = True
-        for y in observations:
+        for i, y in enumerate(observations):
             if (s >> shift) != y:
                 ok = False
                 break
-            s = step(s)
+            if i < len(observations) - 1:
+                for _ in range(call_stride):
+                    s = step(s)
         if ok:
             pre.add(step_back(x))
     return sorted(pre)

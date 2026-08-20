@@ -59,7 +59,10 @@ appendix (run id, seed, trial count, lab + prompt versions).
   **Done 2026-08-18** (fpylll complete box enumeration; full grid scored, with the
   recoverability edge reported as a candidate-count range).
 - `nextint_odd` and `bit_length` leak models (elttam / Minerva ends of the family).
-- Non-consecutive observations (`call_stride>1`): compose `a` with itself per step.
+- ~~Non-consecutive observations (`call_stride>1`): compose `a` with itself per step.~~
+  **Done 2026-08-19** (`recover.lattice.strided_lcg`; the whole recover path takes a
+  `call_stride`, keying the reduced basis on (n, stride) and using a^stride as the
+  per-step multiplier; the grid no longer gaps strided cells).
 - Noise injection → force enumeration → bridge to real side-channel data.
 - MT19937 comparison victim (624-output exact inversion; same capability, different math).
 - ~~Retroactive demonstration: recover "past" tokens from a captured sequence.~~

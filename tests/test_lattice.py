@@ -90,3 +90,23 @@ def test_budget_guard_raises_instead_of_truncating():
     reduced = lattice.reduced_basis(2)
     with pytest.raises(BudgetExceeded):
         enumerate_box(reduced, bounds, node_budget=8)
+
+
+def test_stride_one_is_the_consecutive_path():
+    # call_stride=1 must collapse exactly to the validated consecutive machinery.
+    assert lattice.strided_lcg(1) == (lattice.A, lattice.B)
+    assert lattice.margin_top_bits(ANCHOR, 24, 1) == lattice.margin_top_bits(ANCHOR, 24)
+    assert lattice.recover_pre_states_top_bits(ANCHOR, 24, call_stride=1) == \
+        lattice.recover_pre_states_top_bits(ANCHOR, 24)
+
+
+def test_strided_observations_recover():
+    # Observing every stride-th nextFloat still recovers the pre-call state:
+    # the lattice just uses a^stride as the per-step multiplier.
+    for stride in (2, 3, 5):
+        trials = make_trials(
+            LeakProfile(model=LeakModel.TOP_BITS, bits_per_call=16,
+                        num_observations=4, call_stride=stride), 25, seed=stride)
+        for t in trials:
+            pre = lattice.recover_pre_states_top_bits(t.observations, 16, call_stride=stride)
+            assert t.true_pre_call_state in pre

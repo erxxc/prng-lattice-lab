@@ -11,8 +11,8 @@ import pytest
 
 pytest.importorskip("fpylll")
 
-from prng_lattice_lab.config import SweepConfig
-from prng_lattice_lab.sweep.grid import run_sweep
+from prng_lattice_lab.config import LeakModel, LeakProfile, RecoverMethod, SweepConfig
+from prng_lattice_lab.sweep.grid import run_cell, run_sweep
 
 
 def test_sweep_outcomes_are_honest():
@@ -36,3 +36,13 @@ def test_sweep_outcomes_are_honest():
         # every underdetermined cell really is below the 48-bit floor
         if c.outcome == "underdetermined":
             assert c.bits_per_call * c.num_observations < 48
+
+
+def test_strided_cell_recovers_through_the_general_solver():
+    # A non-consecutive (stride>1) cell no longer records a gap: it routes through
+    # the general solver (not the consecutive round-off anchor) and recovers.
+    cell = run_cell(
+        LeakProfile(model=LeakModel.TOP_BITS, bits_per_call=24, num_observations=3, call_stride=3),
+        20, RecoverMethod.AUTO, seed=0)
+    assert cell.outcome == "recovered" and cell.successes == cell.trials
+    assert cell.capability_gap is None

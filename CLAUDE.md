@@ -138,9 +138,9 @@ into breadth, stop and record the item in `docs/RESEARCH.md` backlog instead.
 
 The general-grid solver (originally deferred beyond this DoD) is now wired — the
 sweep draws the full phase boundary and reports the recoverability edge as a
-candidate-count range. Still explicitly deferred: odd-bound & bit-length leak
-models, non-consecutive observations, noise injection, MT19937 comparison, live
-narrative synthesis, in-repoauditor detection.
+candidate-count range. Non-consecutive observations (`call_stride>1`) are now wired
+too. Still explicitly deferred: odd-bound & bit-length leak models, noise injection,
+MT19937 comparison, live narrative synthesis.
 
 ## Commands
 

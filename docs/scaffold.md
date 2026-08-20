@@ -58,6 +58,10 @@ config (typed)  ─▶  generate/  ─▶  recover/  ─▶  sweep/  ─▶  sto
   `method="roundoff"` is the single Babai point (fast, no uniqueness guarantee).
 - `recover_pre_states_top_bits` — pre-call states consistent with a leak; the entry
   the sweep uses. One element = unique recovery; more than one = genuine collisions.
+- `strided_lcg(stride)` / the `call_stride` parameter threaded through the recover path
+  — non-consecutive observations (every stride-th call) reuse the same machinery with
+  a^stride as the per-step multiplier; the reduced-basis cache keys on (n, stride).
+  `call_stride=1` is byte-identical to the consecutive path.
 
 ### `recover/enumerate.py`  — complete
 - `enumerate_box(reduced_basis, bounds, node_budget)` — COMPLETE enumeration of the

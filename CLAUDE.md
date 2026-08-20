@@ -120,7 +120,10 @@ Known temptations to defer, not chase mid-session:
 - The `nextint_odd` (elttam) and `bit_length` (Minerva) leak models.
 - Full Randar coordinate inversion (Woodland-region math) — out of scope unless the
   goal changes to a full reproduction.
-- Live-model narrative synthesis in `report/synthesis.py`.
+- ~~Live-model narrative synthesis in `report/synthesis.py`.~~ **Done** (2026-08-20) —
+  `synthesize_narrative` calls the Messages API over the versioned prompt + the
+  deterministic report (`report --narrate`); without a key/SDK it raises
+  `NarrativeUnavailable` and the CLI discloses the skip in-report (never faked prose).
 
 **repoauditor's own DoD/UAT completion gate takes priority over this.** The
 `weak_rng_adapter` is a strong *post-DoD* first feature; building the harness
@@ -140,8 +143,9 @@ The general-grid solver (originally deferred beyond this DoD) is now wired — t
 sweep draws the full phase boundary and reports the recoverability edge as a
 candidate-count range. Non-consecutive observations (`call_stride>1`) are now wired
 too, and the MT19937 comparison victim is wired (`mt19937.py`). Noise injection is
-wired too (`LeakProfile.noise`). Still explicitly deferred: odd-bound & bit-length leak
-models, live narrative synthesis.
+wired too (`LeakProfile.noise`), and the optional live narrative pass is wired
+(`report --narrate`, graceful+disclosed without a key). Still explicitly deferred:
+odd-bound & bit-length leak models.
 
 ## Commands
 
@@ -149,6 +153,7 @@ models, live narrative synthesis.
 prng-lattice-lab validate                         # Randar vector sanity
 prng-lattice-lab sweep --trials 200               # run the grid, persist run+cells
 prng-lattice-lab report <run_id> --schema ... --prompt ... --out report.md
+prng-lattice-lab report <run_id> --narrate         # + optional LLM prose (needs key; gap-disclosed without)
 prng-lattice-lab demo 7338710 7668738 5563335     # crack + predict next/prev
 prng-lattice-lab retro --total 20 --offset 10     # reconstruct a whole stream from one 3-token window
 prng-lattice-lab mt-demo --warmup 1000            # MT19937 contrast: clone stdlib random from 624 outputs
@@ -159,5 +164,7 @@ pytest -q                                         # correctness gate
 
 Python ≥3.11. Core path needs only `numpy` (and stdlib). `fpylll` is optional and
 only required for starved-leak cells; its absence is a recorded capability gap,
-never a silent fallback. `jsonschema` optional (store falls back to required-field
+never a silent fallback. `anthropic` optional (only for `report --narrate`; without
+it the deterministic report is complete and the prose skip is disclosed).
+`jsonschema` optional (store falls back to required-field
 checks). No deep learning, no network calls in the core path.

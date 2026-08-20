@@ -19,17 +19,30 @@ inputs.
   * prompt  -> prompts/report_synthesis_v1.md (versioned; never edited in place --
                a new prompt is a new file + REGISTRY entry).
 
-The LLM call is intentionally NOT implemented here (no key assumed in the
-scaffold). render_markdown() produces the complete deterministic report today;
-synthesize_narrative() is the hook that adds prose when a model is available, and
-records which prompt version produced it (reproducibility "as of" block).
+render_markdown() produces the complete deterministic report unconditionally.
+synthesize_narrative() adds prose when a model is reachable (the `anthropic` SDK
+importable AND a key in the environment), and records which prompt version produced
+it (reproducibility "as of" block). When no model is reachable it raises
+NarrativeUnavailable -- a disclosed capability gap, never fabricated prose (rules 7
+and 8: no faked results; uncertainty pauses rather than self-resolving).
 """
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from prng_lattice_lab.characterize import calibration, margin
+
+# The narrative pass frames already-computed tables; a mid-tier model is plenty and
+# keeps the optional prose cheap. Overridable at call time for reproducibility.
+DEFAULT_NARRATIVE_MODEL = "claude-sonnet-5"
+
+
+class NarrativeUnavailable(RuntimeError):
+    """Raised when the optional LLM narrative pass cannot run (no SDK, no key, or
+    the call failed). The deterministic report is always the report of record; this
+    is disclosed as a capability gap, never papered over with invented prose."""
 
 
 def _validate_cells(cells: list[dict], schema_path: str) -> None:
@@ -247,13 +260,79 @@ def _calibration_section(cells: list[dict]) -> str:
     return "\n".join(out)
 
 
-def synthesize_narrative(deterministic_md: str, *, prompt_path: str) -> str:
-    """Hook for LLM-authored prose. Loads the versioned prompt, would call the
-    model with the deterministic tables as context, and return prose tagged with
-    the prompt version. Not wired in the scaffold (no key assumed)."""
+def _load_client():
+    """Return (Anthropic client, resolved key source) or raise NarrativeUnavailable.
+
+    The narrative pass is optional: the SDK is an optional dependency and the key is
+    read from the environment. Either being absent is a disclosed gap, not an error
+    in the pipeline -- the deterministic report stands on its own."""
+    key = os.environ.get("ANTHROPIC_API_KEY")
+    if not key:
+        raise NarrativeUnavailable(
+            "ANTHROPIC_API_KEY not set; narrative prose skipped (deterministic report "
+            "is complete and is the report of record)."
+        )
+    try:
+        import anthropic  # optional dependency; deferred so the core path never needs it
+    except ImportError as exc:
+        raise NarrativeUnavailable(
+            "anthropic SDK not installed; narrative prose skipped. "
+            "Install the 'narrative' extra to enable it."
+        ) from exc
+    return anthropic.Anthropic(api_key=key)
+
+
+def synthesize_narrative(
+    deterministic_md: str,
+    *,
+    prompt_path: str,
+    run_meta: dict,
+    model: str = DEFAULT_NARRATIVE_MODEL,
+    max_tokens: int = 2048,
+) -> str:
+    """LLM-authored prose over the already-computed deterministic report.
+
+    Loads the VERSIONED prompt as the system instruction and passes the rendered
+    deterministic report (which carries every table and disclosed gap) as the only
+    evidence the model may cite -- the prompt forbids introducing any number not
+    present in it. Returns the prose with a machine-checkable attribution line so the
+    report records exactly which prompt version and model produced it.
+
+    Raises NarrativeUnavailable when no model is reachable (no key / no SDK / API
+    error). Callers disclose that as a capability gap; they never fabricate prose.
+    """
     prompt_version = Path(prompt_path).stem
-    raise NotImplementedError(
-        f"Narrative synthesis pending model wiring. Would use prompt "
-        f"'{prompt_version}' over the deterministic report. Deterministic "
-        f"render_markdown() is complete and is the report of record until then."
+    system_prompt = Path(prompt_path).read_text(encoding="utf-8")
+    client = _load_client()
+
+    run_id = run_meta.get("run_id")
+    user_content = (
+        "Here is the complete DETERMINISTIC report for this run. It contains every "
+        "table and every disclosed capability gap. Write only the narrative sections "
+        "described in your instructions, citing only numbers that appear below. Do not "
+        "restate the tables.\n\n"
+        f"run_meta: {json.dumps(run_meta, default=str)}\n\n"
+        "----- DETERMINISTIC REPORT -----\n"
+        f"{deterministic_md}"
     )
+    try:
+        resp = client.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_content}],
+        )
+    except Exception as exc:  # SDK/network/auth errors are all a disclosed gap, not a crash
+        raise NarrativeUnavailable(f"narrative model call failed: {exc}") from exc
+
+    prose = "".join(block.text for block in resp.content if getattr(block, "type", None) == "text").strip()
+    if not prose:
+        raise NarrativeUnavailable("narrative model returned no text")
+
+    # Guarantee the attribution line even if the model omits it, so the deliverable
+    # always records the exact prompt version + model that produced its prose.
+    attribution = f"_Narrative by {prompt_version} · model {model} · over run {run_id}._"
+    first_line = prose.splitlines()[0] if prose.splitlines() else ""
+    if prompt_version not in first_line:
+        prose = f"{attribution}\n\n{prose}"
+    return prose

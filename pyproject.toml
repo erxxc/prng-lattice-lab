@@ -17,6 +17,9 @@ dependencies = [
 lattice = ["fpylll>=0.6", "cysignals>=1.11"]
 # full json-schema validation (store/db falls back to required-field checks without it)
 schema = ["jsonschema>=4.0"]
+# optional LLM prose pass for `report --narrate` (deterministic report needs none of this;
+# absence is disclosed as a capability gap, never faked).
+narrative = ["anthropic>=0.40"]
 dev = ["pytest>=7.0"]
 
 [project.scripts]

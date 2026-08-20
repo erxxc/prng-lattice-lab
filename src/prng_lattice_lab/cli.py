@@ -18,6 +18,7 @@ import argparse
 import datetime as _dt
 import json
 import sys
+from pathlib import Path
 
 from prng_lattice_lab import __version__
 from prng_lattice_lab.config import RecoverMethod, SweepConfig
@@ -72,15 +73,31 @@ def cmd_report(args) -> int:
     if not cells:
         print(f"no cells for run {args.run_id}", file=sys.stderr)
         return 1
-    md = synthesis.render_markdown(
-        cells, schema_path=args.schema,
-        run_meta={"run_id": args.run_id, "lab_version": __version__, "created_at": _now()},
-    )
+    run_meta = {"run_id": args.run_id, "lab_version": __version__, "created_at": _now()}
+    md = synthesis.render_markdown(cells, schema_path=args.schema, run_meta=run_meta)
     store.close()
+
+    narrated = False
+    if args.narrate:
+        try:
+            prose = synthesis.synthesize_narrative(
+                md, prompt_path=args.prompt, run_meta=run_meta, model=args.model)
+            md = f"{md}\n\n---\n\n{prose}\n"
+            narrated = True
+        except synthesis.NarrativeUnavailable as exc:
+            # Rule 7/8: never fabricate prose. Disclose the skip in-report AND on stderr.
+            md = (f"{md}\n\n---\n\n## Narrative (not generated)\n\n"
+                  f"_Prose pass from prompt `{Path(args.prompt).stem}` was requested but "
+                  f"skipped: {exc} The deterministic report above is complete and is the "
+                  f"report of record._\n")
+            print(f"narrative skipped: {exc}", file=sys.stderr)
+
     if args.out:
         with open(args.out, "w", encoding="utf-8") as fh:
             fh.write(md)
-        print(f"wrote {args.out}  (deterministic; prompt '{args.prompt}' would add prose)")
+        tag = (f"deterministic + narrative ({args.model})" if narrated
+               else "deterministic" + (" (narrative skipped, gap disclosed)" if args.narrate else ""))
+        print(f"wrote {args.out}  ({tag})")
     else:
         print(md)
     return 0
@@ -162,6 +179,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--schema", default="schema/records.schema.json")
     sp.add_argument("--prompt", default="prompts/report_synthesis_v1.md")
     sp.add_argument("--out", default=None)
+    sp.add_argument("--narrate", action="store_true",
+                    help="append LLM prose from the versioned prompt (needs ANTHROPIC_API_KEY "
+                         "+ the 'narrative' extra; absence is disclosed as a gap, never faked)")
+    sp.add_argument("--model", default=synthesis.DEFAULT_NARRATIVE_MODEL,
+                    help="model for the optional --narrate prose pass")
     sp.set_defaults(func=cmd_report)
 
     sp = sub.add_parser("demo", help="crack three nextFloat MSBs and predict next/prev")

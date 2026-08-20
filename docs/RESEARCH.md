@@ -82,6 +82,13 @@ appendix (run id, seed, trial count, lab + prompt versions).
   `demonstrate_retroactive`; `prng-lattice-lab retro` CLI). A captured 3-token window
   reconstructs the entire issued stream, tokens BEFORE the window included, verified
   against ground truth.
+- ~~Live-model narrative synthesis (`report/synthesis.synthesize_narrative`).~~
+  **Done 2026-08-20** (`prng-lattice-lab report --narrate`): the versioned prompt is
+  the system instruction, the deterministic report is the only citable evidence, and
+  a machine-checkable attribution line (prompt version + model + run) is prefixed.
+  Without a key/SDK it raises `NarrativeUnavailable` and the CLI discloses the skip
+  in-report — the deterministic report is always the report of record; prose is never
+  faked (rules 7 & 8). Both branches tested (fake-SDK injection for the with-key path).
 - Full Randar coordinate inversion (Woodland-region math) — only if the goal
   changes to a full reproduction.
 

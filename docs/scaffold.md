@@ -113,14 +113,19 @@ config (typed)  ─▶  generate/  ─▶  recover/  ─▶  sweep/  ─▶  sto
   against the schema (required-field check; upgrade to `jsonschema` is a drop-in).
 - Migrations in `store/migrations/*.sql`, applied in order on connect.
 
-### `report/synthesis.py`  — deterministic render complete; prose pending
+### `report/synthesis.py`  — deterministic render + optional narrative, both wired
 - `render_markdown` — pure read projection over stored cells: phase grid (unique-
   recovery rate), margin grid, the recoverability-edge table (ambiguous cells and
   their candidate-count range), the H1 recoverability boundary and the exact-oracle
   calibration/coverage section (both via `characterize/`), the underdetermined-region
   note, and disclosed gaps. No model, every number traces to a `SweepCell`.
-- `synthesize_narrative(prompt_path=...)` — LLM prose hook; loads the versioned
-  prompt, tags output with its version. Not wired (no key assumed).
+- `synthesize_narrative(prompt_path=..., run_meta=..., model=...)` — LLM prose pass
+  (`report --narrate`): loads the versioned prompt as the system instruction, passes
+  the rendered deterministic report as the only citable evidence, and prefixes a
+  machine-checkable attribution line (prompt version + model + run). Needs
+  `ANTHROPIC_API_KEY` and the `narrative` extra; either absent raises
+  `NarrativeUnavailable`, which the CLI discloses in-report — never faked prose
+  (rules 7 & 8). Both branches are tested (fake-SDK injection for the with-key path).
 - Takes `schema` and `prompt` as explicit inputs (the requested contract).
 
 ### `adapt/`  — contract complete; detect half pending

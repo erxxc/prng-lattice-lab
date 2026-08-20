@@ -18,6 +18,7 @@ prng-lattice-lab validate                       # Randar published vector
 prng-lattice-lab demo 7338710 7668738 5563335   # crack + predict next/prev tokens
 prng-lattice-lab retro --total 20 --offset 10   # reconstruct a whole token stream from one captured window
 prng-lattice-lab mt-demo --warmup 1000          # MT19937 contrast: clone Python's random from 624 outputs
+prng-lattice-lab leaks --bits 8                 # characterise the 3 leak models, confirm H3
 prng-lattice-lab sweep --trials 200             # run the phase-diagram grid
 prng-lattice-lab report 1 --out report.md       # deterministic report from stored run
 prng-lattice-lab report 1 --narrate             # + optional LLM prose (needs key; skip disclosed without)
@@ -37,7 +38,7 @@ prng-lattice-lab report 1 --narrate             # + optional LLM prose (needs ke
 | repoauditor `detect_in_source` (OPT-036) | ◑ built inside repoauditor, pending merge |
 | measurement-noise injection (third phase axis) | ✔ wired (`LeakProfile.noise`) |
 | optional LLM narrative pass (`report --narrate`) | ✔ wired — key-gated, skip disclosed |
-| odd-bound / bit-length leak models | ☐ specified |
+| odd-bound / bit-length leak models | ✔ generated + characterised (H3, `leaks`); recovery = disclosed HNP gap |
 
 Install the general solver with `pip install -e '.[lattice]'` (brings in
 `fpylll` + `cysignals`). Without it the round-off anchor still scores and the

@@ -159,6 +159,22 @@ def cmd_mt_demo(args) -> int:
     return 0 if predicted == actual else 1
 
 
+def cmd_leaks(args) -> int:
+    from prng_lattice_lab.characterize import leakage
+    res = leakage.compare_leak_models(bits_per_call=args.bits, trials=args.trials, seed=args.seed)
+    print(json.dumps({
+        "bits_per_call": res["bits_per_call"],
+        "h3_confirmed": res["h3_confirmed"],
+        "verdict": res["verdict"],
+        "per_model": [{
+            "model": r["model"], "bound": r["bound"], "raw_bits": round(r["raw_bits"], 3),
+            "structure": r["structure"], "box_usable": r["box_usable"],
+            "box_usable_bits": round(r["box_usable_bits"], 3),
+        } for r in res["rows"]],
+    }, indent=2))
+    return 0 if res["h3_confirmed"] else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="prng-lattice-lab", description=__doc__)
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -203,6 +219,13 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--warmup", type=int, default=1000, help="outputs to advance before capture")
     sp.add_argument("--predict", type=int, default=5, help="how many next outputs to predict")
     sp.set_defaults(func=cmd_mt_demo)
+
+    sp = sub.add_parser("leaks", help="characterise the three leak models and confirm H3 "
+                                      "(odd bounds / bit-length leak less usable structure)")
+    sp.add_argument("--bits", type=int, default=8, help="common target width per call")
+    sp.add_argument("--trials", type=int, default=40000, help="single-call samples per model")
+    sp.add_argument("--seed", type=int, default=0)
+    sp.set_defaults(func=cmd_leaks)
     return p
 
 

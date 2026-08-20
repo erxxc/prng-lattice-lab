@@ -114,10 +114,11 @@ This is a **weekend harness with a clean fold-in seam**, not a second product.
 Known temptations to defer, not chase mid-session:
 - ~~Wiring `recover/lattice.solve_box` + `recover/enumerate` for the whole grid.~~
   **Done** (2026-08-18) — the general solver is wired and the sweep scores the full
-  grid honestly. Enumeration is fpylll's complete box enumeration; the `nextint_odd`
-  / `bit_length` leak models and non-consecutive (`call_stride>1`) geometries remain
-  deferred.
-- The `nextint_odd` (elttam) and `bit_length` (Minerva) leak models.
+  grid honestly. Enumeration is fpylll's complete box enumeration.
+- ~~The `nextint_odd` (elttam) and `bit_length` (Minerva) leak models.~~ **Done**
+  (2026-08-20) — wired on the generate side + characterised (`characterize/leakage.py`,
+  `prng-lattice-lab leaks`), confirming H3. Their RECOVERY stays a disclosed gap (an
+  HNP lattice, not the round-off box); the sweep records that gap for non-TOP_BITS cells.
 - Full Randar coordinate inversion (Woodland-region math) — out of scope unless the
   goal changes to a full reproduction.
 - ~~Live-model narrative synthesis in `report/synthesis.py`.~~ **Done** (2026-08-20) —
@@ -144,8 +145,11 @@ sweep draws the full phase boundary and reports the recoverability edge as a
 candidate-count range. Non-consecutive observations (`call_stride>1`) are now wired
 too, and the MT19937 comparison victim is wired (`mt19937.py`). Noise injection is
 wired too (`LeakProfile.noise`), and the optional live narrative pass is wired
-(`report --narrate`, graceful+disclosed without a key). Still explicitly deferred:
-odd-bound & bit-length leak models.
+(`report --narrate`, graceful+disclosed without a key). The odd-bound & bit-length
+leak models are wired on the generate side and characterised (H3 confirmed,
+`prng-lattice-lab leaks`); only their HNP-lattice RECOVERY remains a disclosed gap.
+Nothing in the backlog is now deferred except full Randar coordinate inversion (out
+of scope) and — post-DoD — the repoauditor OPT-036 governance admission.
 
 ## Commands
 
@@ -157,6 +161,7 @@ prng-lattice-lab report <run_id> --narrate         # + optional LLM prose (needs
 prng-lattice-lab demo 7338710 7668738 5563335     # crack + predict next/prev
 prng-lattice-lab retro --total 20 --offset 10     # reconstruct a whole stream from one 3-token window
 prng-lattice-lab mt-demo --warmup 1000            # MT19937 contrast: clone stdlib random from 624 outputs
+prng-lattice-lab leaks --bits 8                   # characterise the 3 leak models; confirm H3
 pytest -q                                         # correctness gate
 ```
 

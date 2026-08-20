@@ -80,10 +80,13 @@ config (typed)  ─▶  generate/  ─▶  recover/  ─▶  sweep/  ─▶  sto
   is missed). Backed by fpylll's enumeration. Honours a node budget; raises
   `BudgetExceeded` (never a truncated set) when completeness can't be certified.
 
-### `generate/`  — TOP_BITS complete
-- `leak.observe(rng, profile)` — TOP_BITS complete; NEXTINT_ODD and BIT_LENGTH
-  pending. `item_drop_to_floats` — Randar item-drop inversion, complete.
-- `harness.make_trials` — reproducible `(true_pre_call_state, observations)` trials.
+### `generate/`  — all three leak models wired
+- `leak.observe(rng, profile)` — all three models produce real measurements:
+  TOP_BITS (interval), NEXTINT_ODD (residue class mod odd bound), BIT_LENGTH (starved
+  interval). All share the strided (`call_stride`) geometry via `_observe`.
+  `item_drop_to_floats` — Randar item-drop inversion, complete.
+- `harness.make_trials` — reproducible `(true_pre_call_state, observations)` trials,
+  with optional measurement `noise`.
 
 ### `sweep/grid.py`  — complete; scores the whole grid
 - `run_cell` routing: the 24×3 anchor → `roundoff` (validated, fpylll-free); a cell
@@ -107,6 +110,10 @@ config (typed)  ─▶  generate/  ─▶  recover/  ─▶  sweep/  ─▶  sto
   n·k=48 edge is where it and the structured LCG disagree. Plus `reliability_table`,
   `recovery_by_total_bits` (H1 edge), `recovery_boundary`. All accept `CellResult`
   objects or `store.list_cells` dict rows.
+- `leakage.compare_leak_models` (`prng-lattice-lab leaks`) — confirms **H3** on our own
+  data: per-call observation entropy (raw bits) + constraint structure (interval /
+  residue-class / starved) + box-usable bits. Top-bits ≈ k usable bits; nextInt(odd)
+  ≈ k raw bits but 0 box-usable (residue → HNP); bit-length ≈ 2 bits (starved).
 
 ### `store/db.py`  — sole DB owner, minimal but real
 - SQLite. `record_sweep_run`, `record_cell`, `list_cells`. Validates every write

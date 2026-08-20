@@ -160,8 +160,14 @@ def _general_cell(trials, n_trials: int, k: int, n: int, call_stride: int,
 def run_cell(profile: LeakProfile, trials_per_cell: int, method: RecoverMethod, seed: int) -> CellResult:
     trials = make_trials(profile, trials_per_cell, seed=seed)
     if profile.model is not LeakModel.TOP_BITS:
+        # The odd-bound / bit-length leaks are wired on the GENERATE side and
+        # characterised (characterize.leakage confirms H3), but their RECOVERY is an
+        # HNP lattice (residue class / starved interval), not this lab's round-off
+        # box-CVP -- a disclosed gap, never faked.
         return _gap_cell(profile, trials_per_cell,
-                         "only TOP_BITS wired (nextint_odd / bit_length leak models pending)")
+                         f"{profile.model.value} leak is generated + characterised "
+                         "(see characterize.leakage / H3); round-off recovery N/A "
+                         "(residue/starved -> HNP lattice, deferred)")
 
     k, n, stride, noise = (profile.bits_per_call, profile.num_observations,
                            profile.call_stride, profile.noise)

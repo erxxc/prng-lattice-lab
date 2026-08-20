@@ -2,10 +2,23 @@
 Leak models: how a run of the generator becomes a set of partial observations of
 its internal state. This is the x-axis machinery of the phase diagram.
 
-TOP_BITS is complete and validated (it is what the Randar path consumes).
-NEXTINT_ODD and BIT_LENGTH are specified but not yet implemented -- they are the
-routes to the elttam (odd-bound RandomStringUtils) and Minerva (bit-length) ends
-of the family respectively.
+Three models, faithful to real Java idioms:
+  * TOP_BITS   -- the top k bits of each state (nextFloat=24, pow2 nextInt=log2 bound).
+                  An INTERVAL constraint: directly the box-CVP the round-off lattice
+                  consumes. Complete + validated (the Randar path).
+  * NEXTINT_ODD -- nextInt(odd bound): the value survives a modulo, so the constraint
+                  is a RESIDUE CLASS mod an odd bound, not an interval (the elttam /
+                  RandomStringUtils case). Coprime to the LCG's power-of-two modulus, so
+                  it does not align with the round-off lattice -- recovery is HNP.
+  * BIT_LENGTH -- only the bit-length of nextInt(bound) (the Minerva analogue). An
+                  interval, but a starved one: ~2 bits per observation regardless of
+                  bound, so many observations are needed.
+
+All three are wired on the GENERATE side (observe() produces real measurements) and
+characterised for how much usable structure each carries (characterize/leakage.py --
+this is where H3 is confirmed on our own data). RECOVERY beyond TOP_BITS (an HNP
+lattice for the residue/starved constraints) is a disclosed capability gap in the
+sweep, not faked.
 """
 from __future__ import annotations
 
@@ -16,30 +29,35 @@ from prng_lattice_lab.lcg import JavaRandom
 def observe(rng: JavaRandom, profile: LeakProfile) -> list[int]:
     """Draw `profile.num_observations` outputs and return the leaked integers.
 
-    For TOP_BITS: returns the top `bits_per_call` bits of each successive state
-    (the direct measurement the lattice consumes). call_stride>1 discards
-    (stride-1) calls between observations.
+    TOP_BITS returns the top `bits_per_call` bits of each successive state (the direct
+    measurement the lattice consumes). NEXTINT_ODD returns nextInt(odd bound) values
+    (a residue-class leak). BIT_LENGTH returns the bit-length of nextInt(bound) values
+    (a starved interval leak). call_stride>1 discards (stride-1) calls between
+    observations for every model.
     """
     if profile.model is LeakModel.TOP_BITS:
-        out: list[int] = []
-        for _ in range(profile.num_observations):
-            val = rng.next(profile.bits_per_call)
-            for _ in range(profile.call_stride - 1):
-                rng.next(profile.bits_per_call)  # skipped (unobserved) calls
-            out.append(val)
-        return out
+        return _observe(profile, lambda: rng.next(profile.bits_per_call))
     if profile.model is LeakModel.NEXTINT_ODD:
-        raise NotImplementedError(
-            "Odd-bound nextInt leak model pending -- the elttam/RandomStringUtils "
-            "case. Must model the modulo bias so the solver sees the correct "
-            "surviving-bit constraints."
-        )
+        bound = profile.effective_bound()
+        if bound % 2 == 0:
+            raise ValueError(f"NEXTINT_ODD needs an odd bound; got {bound}")
+        return _observe(profile, lambda: rng.next_int(bound))
     if profile.model is LeakModel.BIT_LENGTH:
-        raise NotImplementedError(
-            "Bit-length leak model pending -- the Minerva/HNP analogue. This is the "
-            "starved-leak stretch goal that exercises recover.enumerate."
-        )
+        bound = profile.effective_bound()
+        return _observe(profile, lambda: rng.next_int(bound).bit_length())
     raise ValueError(f"unknown leak model {profile.model!r}")
+
+
+def _observe(profile: LeakProfile, draw) -> list[int]:
+    """Run `num_observations` draws, discarding (call_stride-1) draws between each so
+    every model shares the strided-observation geometry."""
+    out: list[int] = []
+    for _ in range(profile.num_observations):
+        val = draw()
+        for _ in range(profile.call_stride - 1):
+            draw()  # skipped (unobserved) calls
+        out.append(val)
+    return out
 
 
 # --- Randar item-drop reconstruction (complete) ---------------------------------

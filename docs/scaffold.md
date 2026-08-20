@@ -70,6 +70,9 @@ config (typed)  ─▶  generate/  ─▶  recover/  ─▶  sweep/  ─▶  sto
   — non-consecutive observations (every stride-th call) reuse the same machinery with
   a^stride as the per-step multiplier; the reduced-basis cache keys on (n, stride).
   `call_stride=1` is byte-identical to the consecutive path.
+- `noise` (on `LeakProfile`, `top_bits_bounds`, `recover_pre_states_top_bits`) — a
+  bounded measurement error: the box widens by `noise`, recovery verifies within it.
+  Completeness holds; ambiguity grows with noise, and over-determination buys tolerance.
 
 ### `recover/enumerate.py`  — complete
 - `enumerate_box(reduced_basis, bounds, node_budget)` — COMPLETE enumeration of the

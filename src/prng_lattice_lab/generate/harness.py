@@ -31,5 +31,10 @@ def make_trials(profile: LeakProfile, n: int, seed: int = 0) -> list[Trial]:
         state = rng.getrandbits(48)
         gen = JavaRandom.from_internal_state(state)
         obs = observe(gen, profile)
+        if profile.noise:
+            # Perturb each measurement by a bounded error; the true top-k stays within
+            # `noise` of the observed value, which recovery accounts for by widening the
+            # box. Models a noisy side channel; recovery degrades to enumeration/ambiguity.
+            obs = [o + rng.randint(-profile.noise, profile.noise) for o in obs]
         trials.append(Trial(true_pre_call_state=state, observations=obs, profile=profile))
     return trials

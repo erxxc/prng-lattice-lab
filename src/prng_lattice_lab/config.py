@@ -42,6 +42,8 @@ class LeakProfile:
     bits_per_call: int = 24              # e.g. 24 for nextFloat, log2(bound) for pow2 nextInt
     num_observations: int = 3            # consecutive calls observed
     call_stride: int = 1                 # 1 = consecutive; >1 = known gaps between observed calls
+    noise: int = 0                       # max |error| on each top-k observation (0 = exact);
+                                         # recovery widens the box by this bound (see recover.lattice)
 
     def total_leaked_bits(self) -> int:
         return self.bits_per_call * self.num_observations

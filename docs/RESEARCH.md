@@ -63,7 +63,12 @@ appendix (run id, seed, trial count, lab + prompt versions).
   **Done 2026-08-19** (`recover.lattice.strided_lcg`; the whole recover path takes a
   `call_stride`, keying the reduced basis on (n, stride) and using a^stride as the
   per-step multiplier; the grid no longer gaps strided cells).
-- Noise injection → force enumeration → bridge to real side-channel data.
+- ~~Noise injection → force enumeration → bridge to real side-channel data.~~
+  **Done 2026-08-19** (`LeakProfile.noise`; recovery widens the box by the noise bound
+  and verifies within it). Finding — noise is a third axis: over-determination buys
+  noise tolerance. At the n·k=48 edge, noise=1 already blows candidates from ~1.5 to
+  ~27; a far over-determined cell (n·k=96) stays uniquely recoverable at noise=12.
+  Enumeration stays complete throughout (truth never dropped).
 - ~~MT19937 comparison victim (624-output exact inversion; same capability, different math).~~
   **Done 2026-08-19** (`mt19937.py`: temper/untemper/predict_next; `prng-lattice-lab
   mt-demo`; validated against Python's stdlib MT19937). Finding — the two victims sit

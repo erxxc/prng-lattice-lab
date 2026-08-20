@@ -139,8 +139,9 @@ into breadth, stop and record the item in `docs/RESEARCH.md` backlog instead.
 The general-grid solver (originally deferred beyond this DoD) is now wired — the
 sweep draws the full phase boundary and reports the recoverability edge as a
 candidate-count range. Non-consecutive observations (`call_stride>1`) are now wired
-too, and the MT19937 comparison victim is wired (`mt19937.py`). Still explicitly
-deferred: odd-bound & bit-length leak models, noise injection, live narrative synthesis.
+too, and the MT19937 comparison victim is wired (`mt19937.py`). Noise injection is
+wired too (`LeakProfile.noise`). Still explicitly deferred: odd-bound & bit-length leak
+models, live narrative synthesis.
 
 ## Commands
 

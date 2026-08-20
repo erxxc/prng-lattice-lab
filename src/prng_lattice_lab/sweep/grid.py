@@ -87,7 +87,8 @@ def _roundoff_anchor(trials, n_trials: int) -> CellResult:
     )
 
 
-def _underdetermined_cell(trials, n_trials: int, k: int, n: int, call_stride: int) -> CellResult:
+def _underdetermined_cell(trials, n_trials: int, k: int, n: int, call_stride: int,
+                          noise: int = 0) -> CellResult:
     """n*k < 48: fewer leaked bits than the 48-bit secret, so by pigeonhole the
     leak does not determine a unique state. No recovery is attempted; the margin
     is still recorded (when fpylll is present) because it illustrates that a small
@@ -104,7 +105,8 @@ def _underdetermined_cell(trials, n_trials: int, k: int, n: int, call_stride: in
     )
 
 
-def _general_cell(trials, n_trials: int, k: int, n: int, call_stride: int) -> CellResult:
+def _general_cell(trials, n_trials: int, k: int, n: int, call_stride: int,
+                  noise: int = 0) -> CellResult:
     """n*k >= 48: enumerate the box completely per trial and classify."""
     successes = 0
     ambiguous = 0
@@ -118,7 +120,7 @@ def _general_cell(trials, n_trials: int, k: int, n: int, call_stride: int) -> Ce
         start = time.perf_counter_ns()
         try:
             candidates = lattice.recover_pre_states_top_bits(
-                t.observations, k, call_stride=call_stride)
+                t.observations, k, call_stride=call_stride, noise=noise)
         except BudgetExceeded:
             times.append(time.perf_counter_ns() - start)
             budget_hit += 1
@@ -161,13 +163,14 @@ def run_cell(profile: LeakProfile, trials_per_cell: int, method: RecoverMethod, 
         return _gap_cell(profile, trials_per_cell,
                          "only TOP_BITS wired (nextint_odd / bit_length leak models pending)")
 
-    k, n, stride = profile.bits_per_call, profile.num_observations, profile.call_stride
-    if k == 24 and n == 3 and stride == 1:
+    k, n, stride, noise = (profile.bits_per_call, profile.num_observations,
+                           profile.call_stride, profile.noise)
+    if k == 24 and n == 3 and stride == 1 and noise == 0:
         return _roundoff_anchor(trials, trials_per_cell)   # validated fpylll-free path
     if k * n < SECRET_BITS:
-        return _underdetermined_cell(trials, trials_per_cell, k, n, stride)
+        return _underdetermined_cell(trials, trials_per_cell, k, n, stride, noise)
     try:
-        return _general_cell(trials, trials_per_cell, k, n, stride)
+        return _general_cell(trials, trials_per_cell, k, n, stride, noise)
     except lattice.ReductionUnavailable:
         return _gap_cell(profile, trials_per_cell,
                          "fpylll not installed; general solver unavailable (round-off anchor still scores)")

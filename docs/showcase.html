@@ -1,0 +1,762 @@
+<title>PRNG Lattice Lab</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+  /* ---------- tokens: light on bare :root (the un-stamped default reads this) ---------- */
+  :root {
+    --ground:      #e9ebf1;
+    --surface:     #ffffff;
+    --surface-2:   #f4f5f9;
+    --ink:         #161a24;
+    --ink-soft:    #39404f;
+    --muted:       #656d80;
+    --line:        #d7dbe6;
+    --line-strong: #c2c8d6;
+
+    --accent:      #a75e0c;   /* brass, text-safe on light */
+    --accent-fill: #d78c26;
+    --accent-soft: rgba(215,140,38,.12);
+
+    --c-rec-bg:  rgba(31,158,122,.14);
+    --c-rec-fg:  #16785c;
+    --c-rec-ln:  rgba(31,158,122,.42);
+    --c-edge-bg: rgba(199,126,23,.20);
+    --c-edge-fg: #92560c;
+    --c-edge-ln: rgba(199,126,23,.55);
+    --c-und-bg:  rgba(108,117,132,.08);
+    --c-und-fg:  #8a92a2;
+    --c-und-ln:  rgba(108,117,132,.22);
+
+    --good: #16785c;
+    --shadow: 0 1px 2px rgba(20,26,40,.06), 0 8px 30px rgba(20,26,40,.07);
+    --radius: 12px;
+    --measure: 68ch;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #0d1117;
+      --surface:     #141b25;
+      --surface-2:   #1a222e;
+      --ink:         #e7eaf2;
+      --ink-soft:    #b8c0cf;
+      --muted:       #7e8a9d;
+      --line:        #253040;
+      --line-strong: #33404f;
+
+      --accent:      #e7ae48;
+      --accent-fill: #e7ae48;
+      --accent-soft: rgba(231,174,72,.14);
+
+      --c-rec-bg:  rgba(70,195,156,.15);
+      --c-rec-fg:  #63d3ad;
+      --c-rec-ln:  rgba(70,195,156,.40);
+      --c-edge-bg: rgba(231,174,72,.20);
+      --c-edge-fg: #f0be63;
+      --c-edge-ln: rgba(231,174,72,.55);
+      --c-und-bg:  rgba(126,138,157,.08);
+      --c-und-fg:  #6b7686;
+      --c-und-ln:  rgba(126,138,157,.20);
+
+      --good: #63d3ad;
+      --shadow: 0 1px 2px rgba(0,0,0,.30), 0 12px 40px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:      #0d1117;
+    --surface:     #141b25;
+    --surface-2:   #1a222e;
+    --ink:         #e7eaf2;
+    --ink-soft:    #b8c0cf;
+    --muted:       #7e8a9d;
+    --line:        #253040;
+    --line-strong: #33404f;
+    --accent:      #e7ae48;
+    --accent-fill: #e7ae48;
+    --accent-soft: rgba(231,174,72,.14);
+    --c-rec-bg:  rgba(70,195,156,.15);
+    --c-rec-fg:  #63d3ad;
+    --c-rec-ln:  rgba(70,195,156,.40);
+    --c-edge-bg: rgba(231,174,72,.20);
+    --c-edge-fg: #f0be63;
+    --c-edge-ln: rgba(231,174,72,.55);
+    --c-und-bg:  rgba(126,138,157,.08);
+    --c-und-fg:  #6b7686;
+    --c-und-ln:  rgba(126,138,157,.20);
+    --good: #63d3ad;
+    --shadow: 0 1px 2px rgba(0,0,0,.30), 0 12px 40px rgba(0,0,0,.35);
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
+    font-size: 17px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+  .prose { max-width: var(--measure); }
+  .prose p { color: var(--ink-soft); }
+
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px solid transparent; }
+  a:hover { border-bottom-color: currentColor; }
+  :focus-visible { outline: 2px solid var(--accent-fill); outline-offset: 3px; border-radius: 3px; }
+
+  code, .mono { font-family: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace; }
+  code {
+    font-size: .86em; background: var(--surface-2); color: var(--ink);
+    padding: .12em .38em; border-radius: 5px; border: 1px solid var(--line);
+  }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ---------- masthead ---------- */
+  header.masthead { padding: 68px 0 30px; }
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace; font-size: 12.5px; font-weight: 500;
+    letter-spacing: .22em; text-transform: uppercase; color: var(--accent);
+    display: flex; align-items: center; gap: 12px;
+  }
+  .eyebrow::before {
+    content: ""; width: 26px; height: 2px; background: var(--accent-fill); display: inline-block;
+  }
+  h1 {
+    font-family: "Fraunces", Georgia, serif; font-weight: 600;
+    font-size: clamp(2.5rem, 6vw, 4.1rem); line-height: 1.02; letter-spacing: -.015em;
+    margin: 20px 0 0; text-wrap: balance;
+  }
+  h1 .lede-em { font-style: italic; font-weight: 500; color: var(--accent); }
+  .thesis {
+    font-size: clamp(1.12rem, 2.2vw, 1.4rem); line-height: 1.5; color: var(--ink-soft);
+    max-width: 40ch; margin: 26px 0 0; font-weight: 400;
+  }
+  .thesis strong { color: var(--ink); font-weight: 600; }
+
+  /* provenance strip */
+  .provenance {
+    display: flex; flex-wrap: wrap; gap: 0; margin: 40px 0 0;
+    border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--surface); box-shadow: var(--shadow); overflow: hidden;
+  }
+  .prov {
+    flex: 1 1 120px; padding: 15px 18px; border-right: 1px solid var(--line);
+  }
+  .prov:last-child { border-right: 0; }
+  .prov .k {
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: .13em;
+    text-transform: uppercase; color: var(--muted); display: block; margin-bottom: 5px;
+  }
+  .prov .v { font-family: "IBM Plex Mono", monospace; font-weight: 500; font-size: 15px; color: var(--ink); }
+
+  /* ---------- section scaffolding ---------- */
+  section { padding: 46px 0; border-top: 1px solid var(--line); }
+  section:first-of-type { border-top: 0; }
+  .sec-head { display: flex; gap: 18px; align-items: baseline; margin-bottom: 8px; }
+  .sec-no {
+    font-family: "IBM Plex Mono", monospace; font-size: 13px; font-weight: 600;
+    color: var(--accent); letter-spacing: .05em; padding-top: 6px; flex: none;
+  }
+  h2 {
+    font-family: "Fraunces", Georgia, serif; font-weight: 600;
+    font-size: clamp(1.6rem, 3.4vw, 2.15rem); line-height: 1.1; letter-spacing: -.01em;
+    margin: 0; text-wrap: balance;
+  }
+  h3 {
+    font-family: "Hanken Grotesk", sans-serif; font-weight: 600; font-size: 1.02rem;
+    letter-spacing: .01em; margin: 0 0 6px;
+  }
+  .kicker {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; letter-spacing: .04em;
+    color: var(--muted); margin: 2px 0 0 0;
+  }
+  .sec-body { margin-top: 26px; }
+  p { margin: 0 0 18px; }
+
+  /* ---------- phase grid ---------- */
+  .panel {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+    box-shadow: var(--shadow); padding: 26px; margin: 8px 0 0;
+  }
+  .panel-title {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--muted); margin: 0 0 20px;
+  }
+  .grid-scroll { overflow-x: auto; }
+  .phase {
+    display: grid; grid-template-columns: auto repeat(7, minmax(52px, 1fr));
+    gap: 5px; min-width: 560px;
+  }
+  .phase .axis-corner { font-size: 11px; }
+  .phase .col-h, .phase .row-h {
+    font-family: "IBM Plex Mono", monospace; font-size: 12.5px; color: var(--muted);
+    display: flex; align-items: center; justify-content: center; font-weight: 500;
+  }
+  .phase .row-h { justify-content: flex-end; padding-right: 10px; white-space: nowrap; }
+  .cell {
+    aspect-ratio: 1 / 1; border-radius: 7px; display: flex; align-items: center; justify-content: center;
+    font-family: "IBM Plex Mono", monospace; font-weight: 600; font-size: 13px;
+    border: 1px solid transparent; position: relative;
+    opacity: 0; transform: scale(.82);
+    animation: pop .42s cubic-bezier(.2,.9,.3,1) forwards;
+  }
+  @keyframes pop { to { opacity: 1; transform: scale(1); } }
+  @media (prefers-reduced-motion: reduce) {
+    .cell { animation: none; opacity: 1; transform: none; }
+  }
+  .cell.rec  { background: var(--c-rec-bg);  border-color: var(--c-rec-ln);  color: var(--c-rec-fg); }
+  .cell.edge { background: var(--c-edge-bg); border-color: var(--c-edge-ln); color: var(--c-edge-fg); box-shadow: inset 0 0 0 1px var(--c-edge-ln); }
+  .cell.und  { background: var(--c-und-bg);  border-color: var(--c-und-ln);  color: var(--c-und-fg); font-weight: 400; }
+  .cell.rec::after { content: "100%"; font-size: 11px; opacity: .9; }
+  .cell.und::after { content: "·"; font-size: 18px; line-height: 0; }
+
+  .axis-label {
+    font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .axis-x { text-align: center; margin-top: 14px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 18px 24px; margin-top: 22px; }
+  .legend .li { display: flex; align-items: center; gap: 9px; font-size: 13.5px; color: var(--ink-soft); }
+  .legend .sw { width: 15px; height: 15px; border-radius: 4px; border: 1px solid; flex: none; }
+  .sw.rec  { background: var(--c-rec-bg);  border-color: var(--c-rec-ln); }
+  .sw.edge { background: var(--c-edge-bg); border-color: var(--c-edge-ln); }
+  .sw.und  { background: var(--c-und-bg);  border-color: var(--c-und-ln); }
+
+  /* ---------- generic data table ---------- */
+  .tbl-scroll { overflow-x: auto; margin-top: 6px; }
+  table.data { border-collapse: collapse; width: 100%; min-width: 460px; font-size: 14.5px; }
+  table.data th, table.data td {
+    text-align: right; padding: 10px 14px; border-bottom: 1px solid var(--line);
+    font-variant-numeric: tabular-nums; font-family: "IBM Plex Mono", monospace;
+  }
+  table.data th {
+    font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+    font-weight: 500; border-bottom: 1px solid var(--line-strong);
+  }
+  table.data td:first-child, table.data th:first-child { text-align: left; }
+  table.data tr:last-child td { border-bottom: 0; }
+  table.data td .hl { color: var(--accent); font-weight: 600; }
+
+  /* ---------- findings cards ---------- */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; margin-top: 8px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 20px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 4px;
+  }
+  .card .tag {
+    align-self: flex-start; font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
+    letter-spacing: .1em; text-transform: uppercase; padding: 3px 8px; border-radius: 20px;
+    background: var(--accent-soft); color: var(--accent); margin-bottom: 8px; font-weight: 600;
+  }
+  .card p { font-size: 14.5px; color: var(--ink-soft); margin: 4px 0 0; }
+  .card .stat {
+    font-family: "IBM Plex Mono", monospace; font-size: 14px; color: var(--ink);
+    margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line-strong);
+  }
+  .card .stat b { color: var(--good); }
+
+  /* ---------- bit-bars for H3 ---------- */
+  .leakrow { display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 8px; }
+  @media (min-width: 720px) { .leakrow { grid-template-columns: repeat(3, 1fr); } }
+  .leak {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 20px; box-shadow: var(--shadow);
+  }
+  .leak h3 { font-family: "IBM Plex Mono", monospace; font-size: 14px; }
+  .leak .struct { font-size: 12.5px; color: var(--muted); font-family: "IBM Plex Mono", monospace; margin-bottom: 16px; }
+  .bar { margin: 12px 0; }
+  .bar .lab { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-soft); margin-bottom: 5px; font-family: "IBM Plex Mono", monospace; }
+  .bar .track { height: 9px; background: var(--surface-2); border-radius: 6px; overflow: hidden; border: 1px solid var(--line); }
+  .bar .fill { height: 100%; border-radius: 6px; }
+  .fill.raw  { background: var(--muted); }
+  .fill.use  { background: var(--accent-fill); }
+  .fill.zero { background: transparent; }
+  .leak .verdict { font-size: 13px; color: var(--ink-soft); margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line-strong); }
+
+  /* ---------- demonstrations ---------- */
+  .demos { display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 8px; }
+  @media (min-width: 800px) { .demos { grid-template-columns: 1fr 1fr; } }
+  .demo {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 22px; box-shadow: var(--shadow); display: flex; flex-direction: column;
+  }
+  .demo.wide { grid-column: 1 / -1; }
+  .demo-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+  .demo h3 { font-size: 1.05rem; }
+  .chip {
+    font-family: "IBM Plex Mono", monospace; font-size: 11px; font-weight: 600; letter-spacing: .06em;
+    padding: 4px 10px; border-radius: 20px; white-space: nowrap; flex: none;
+    background: var(--c-rec-bg); color: var(--c-rec-fg); border: 1px solid var(--c-rec-ln);
+  }
+  .chip::before { content: "✓ "; }
+  .demo .cmd {
+    font-family: "IBM Plex Mono", monospace; font-size: 12.5px; color: var(--muted);
+    margin: 2px 0 16px;
+  }
+  .flow { display: flex; flex-direction: column; gap: 10px; margin-top: auto; }
+  .step { display: flex; gap: 12px; align-items: flex-start; }
+  .step .n {
+    font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--accent); font-weight: 600;
+    flex: none; width: 16px; padding-top: 2px;
+  }
+  .step .t { font-size: 14px; color: var(--ink-soft); }
+  .step .t b { color: var(--ink); font-weight: 600; }
+  .val { font-family: "IBM Plex Mono", monospace; font-size: 13px; color: var(--ink);
+         background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }
+
+  .contrast {
+    display: grid; grid-template-columns: 1fr; gap: 0; margin-top: 16px;
+    border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden;
+  }
+  @media (min-width: 620px) { .contrast { grid-template-columns: 1fr 1fr; } }
+  .contrast .side { padding: 18px 20px; }
+  .contrast .side + .side { border-top: 1px solid var(--line); }
+  @media (min-width: 620px) { .contrast .side + .side { border-top: 0; border-left: 1px solid var(--line); } }
+  .contrast .who { font-family: "IBM Plex Mono", monospace; font-size: 13px; font-weight: 600; color: var(--accent); margin-bottom: 10px; }
+  .contrast ul { margin: 0; padding-left: 18px; }
+  .contrast li { font-size: 14px; color: var(--ink-soft); margin-bottom: 6px; }
+  .contrast li b { color: var(--ink); }
+
+  /* ---------- fold-in ---------- */
+  .foldin { display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 8px; }
+  @media (min-width: 720px) { .foldin { grid-template-columns: 1fr 1fr; } }
+  .status-pill {
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px; font-weight: 600; letter-spacing: .08em;
+    text-transform: uppercase; padding: 3px 9px; border-radius: 20px; align-self: flex-start;
+  }
+  .status-pill.done { background: var(--c-rec-bg); color: var(--c-rec-fg); border: 1px solid var(--c-rec-ln); }
+  .status-pill.prop { background: var(--c-edge-bg); color: var(--c-edge-fg); border: 1px solid var(--c-edge-ln); }
+
+  .callout {
+    border-left: 3px solid var(--accent-fill); background: var(--surface-2);
+    padding: 16px 20px; border-radius: 0 var(--radius) var(--radius) 0; margin: 24px 0 0;
+  }
+  .callout p { margin: 0; font-size: 14.5px; color: var(--ink-soft); }
+  .callout strong { color: var(--ink); }
+
+  /* ---------- footer ---------- */
+  footer { border-top: 1px solid var(--line); padding: 40px 0 70px; }
+  .repro { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px 22px; }
+  .repro pre {
+    font-family: "IBM Plex Mono", monospace; font-size: 12.5px; line-height: 1.9; color: var(--ink-soft);
+    margin: 10px 0 0; overflow-x: auto; white-space: pre;
+  }
+  .repro .prompt { color: var(--accent); }
+  .foot-meta { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 26px; font-size: 13px; color: var(--muted); font-family: "IBM Plex Mono", monospace; }
+
+  /* theme toggle */
+  .toggle {
+    position: fixed; top: 16px; right: 16px; z-index: 10;
+    background: var(--surface); border: 1px solid var(--line); color: var(--ink-soft);
+    width: 38px; height: 38px; border-radius: 10px; cursor: pointer; box-shadow: var(--shadow);
+    font-size: 16px; display: flex; align-items: center; justify-content: center;
+  }
+  .toggle:hover { border-color: var(--line-strong); }
+
+  .hl-accent { color: var(--accent); font-weight: 600; }
+</style>
+
+<button class="toggle" id="themeToggle" aria-label="Toggle light and dark theme" title="Toggle theme">◐</button>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="eyebrow">prng&nbsp;·&nbsp;lattice&nbsp;·&nbsp;lab</div>
+    <h1>Where <span class="lede-em">java.util.Random</span> stops keeping secrets.</h1>
+    <p class="thesis">A closed, offline harness that maps the exact boundary — in
+      <strong>bits-per-call × observations</strong> — between a PRNG state recovered
+      instantly by lattice round-off and one that stays hidden.</p>
+
+    <div class="provenance" role="group" aria-label="Run provenance">
+      <div class="prov"><span class="k">victim</span><span class="v">java.util.Random</span></div>
+      <div class="prov"><span class="k">run</span><span class="v">#1 · seed 0</span></div>
+      <div class="prov"><span class="k">trials / cell</span><span class="v num">200</span></div>
+      <div class="prov"><span class="k">grid</span><span class="v num">49 cells</span></div>
+      <div class="prov"><span class="k">anchor vector</span><span class="v">✓ Randar</span></div>
+      <div class="prov"><span class="k">lab</span><span class="v">v0.1.0</span></div>
+    </div>
+  </header>
+
+  <!-- 01 -->
+  <section>
+    <div class="sec-head">
+      <div class="sec-no">01</div>
+      <div>
+        <h2>The victim is a 48-bit truncated LCG</h2>
+        <p class="kicker">state<sub>n+1</sub> = (a · state<sub>n</sub> + b) mod 2⁴⁸ &nbsp;·&nbsp; a = 25214903917, b = 11</p>
+      </div>
+    </div>
+    <div class="sec-body prose">
+      <p><code>java.util.Random</code> — the same generator behind Minecraft's world RNG,
+        Apache Commons <code>RandomStringUtils</code>, and unseeded <code>new Random()</code>
+        token generation — advances a 48-bit state by one linear step per call and hands
+        back only the <em>top</em> bits. <code>nextFloat()</code> leaks the top 24; a
+        power-of-two <code>nextInt()</code> leaks its top <code>log₂(bound)</code>.</p>
+      <p>Each leaked call pins the hidden state to an interval. Stack a few and the
+        constraints become a lattice: recovering the state is a closest-vector problem the
+        <strong>Babai round-off</strong> solves in microseconds. This is the
+        <a href="https://github.com/spawnmason/randar-explanation" target="_blank" rel="noopener">Randar</a>
+        attack, generalised. The lab pins its correctness to the published vector — three
+        <code>nextFloat</code> MSBs crack back to an exact internal state:</p>
+    </div>
+    <div class="panel" style="margin-top:22px">
+      <p class="panel-title">Anchor · validated every test run</p>
+      <div class="mono" style="font-size:14px; line-height:2; overflow-x:auto; white-space:nowrap">
+        <span style="color:var(--muted)">crack_three_floats_msb(</span><span class="hl-accent">7338710, 7668738, 5563335</span><span style="color:var(--muted)">)</span><br>
+        &nbsp;&nbsp;→ internal state <span class="val">123123123123123</span> &nbsp;<span style="color:var(--good)">✓ exact</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 02 -->
+  <section>
+    <div class="sec-head">
+      <div class="sec-no">02</div>
+      <div>
+        <h2>The phase diagram</h2>
+        <p class="kicker">unique-recovery rate over the (bits × observations) grid</p>
+      </div>
+    </div>
+    <div class="sec-body prose">
+      <p>Sweep the two knobs — how many bits each call leaks, and how many calls you see —
+        and score 200 trials per cell against known ground truth. Three regimes fall out,
+        and the boundary between them is sharp. It tracks a single quantity: total leaked
+        bits <code>n·k</code> against the 48-bit secret.</p>
+    </div>
+
+    <div class="panel">
+      <p class="panel-title">Recovery outcome per cell &nbsp;·&nbsp; brass band = the n·k = 48 edge</p>
+      <div class="grid-scroll">
+        <div class="phase" id="phaseGrid" aria-label="Phase diagram grid"></div>
+      </div>
+      <p class="axis-x axis-label">observations&nbsp;(calls seen) →</p>
+      <div class="legend">
+        <span class="li"><span class="sw rec"></span> recovered — one state, uniquely</span>
+        <span class="li"><span class="sw edge"></span> edge — genuine collisions (n·k ≈ 48)</span>
+        <span class="li"><span class="sw und"></span> underdetermined — n·k &lt; 48, no unique state exists</span>
+      </div>
+    </div>
+    <div class="sec-body prose">
+      <p><span class="hl-accent">0 capability gaps</span> in this run: with <code>fpylll</code>
+        present, the general solver scores the whole grid by complete box enumeration.
+        The vertical axis label is bits-per-call; each brass cell sits exactly on
+        <code>n·k = 48</code>.</p>
+    </div>
+  </section>
+
+  <!-- 03 -->
+  <section>
+    <div class="sec-head">
+      <div class="sec-no">03</div>
+      <div>
+        <h2>The edge is a band, not a line</h2>
+        <p class="kicker">at n·k = 48 the leak stops distinguishing every state</p>
+      </div>
+    </div>
+    <div class="sec-body prose">
+      <p>Right at 48 leaked bits, the observation no longer picks out a single state —
+        several <code>java.util.Random</code> states produce the identical leak. The
+        enumeration stays <strong>complete</strong> (the true state is always in the set),
+        so the honest answer is a <em>range</em> of candidates, never a collapsed guess.</p>
+    </div>
+    <div class="panel">
+      <p class="panel-title">Recoverability edge · every cell has n·k = 48</p>
+      <div class="tbl-scroll">
+        <table class="data">
+          <thead>
+            <tr><th>bits · obs</th><th>unique / trials</th><th>unique rate</th><th>mean consistent states</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>4 × 12</td><td>70 / 200</td><td>35.0%</td><td><span class="hl">1.99</span></td></tr>
+            <tr><td>8 × 6</td><td>92 / 200</td><td>46.0%</td><td><span class="hl">1.67</span></td></tr>
+            <tr><td>12 × 4</td><td>63 / 200</td><td>31.5%</td><td><span class="hl">2.00</span></td></tr>
+            <tr><td>16 × 3</td><td>120 / 200</td><td>60.0%</td><td><span class="hl">1.41</span></td></tr>
+            <tr><td>24 × 2</td><td>43 / 200</td><td>21.5%</td><td><span class="hl">1.85</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- 04 -->
+  <section>
+    <div class="sec-head">
+      <div class="sec-no">04</div>
+      <div>
+        <h2>What governs the boundary</h2>
+        <p class="kicker">three hypotheses, confirmed on the lab's own data</p>
+      </div>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <span class="tag">H1 · total bits</span>
+        <h3>It's n·k vs 48</h3>
+        <p>Unique recovery is governed by total leaked bits against the 48-bit secret — not
+          by how the bits are split across calls.</p>
+        <div class="stat">0% at n·k ≤ 40 · <b>39%</b> at 48 · <b>100%</b> for n·k ≥ 60</div>
+      </div>
+      <div class="card">
+        <span class="tag">H2 · round-off</span>
+        <h3>Uniqueness is the limiter</h3>
+        <p>The Babai round-off margin ‖M·e‖∞ never crosses its 0.5 safety line anywhere on
+          the grid — so it's information, not arithmetic, that bounds recovery.</p>
+        <div class="stat">peak margin <b>0.477</b> &lt; 0.5 across all 49 cells</div>
+      </div>
+      <div class="card">
+        <span class="tag">H3 · leak shape</span>
+        <h3>Odd bounds leak less</h3>
+        <p>Same raw bits, wrong shape: <code>nextInt(odd)</code> gives a residue class the
+          round-off lattice can't consume — it needs an HNP attack instead.</p>
+        <div class="stat">see the leak-model panel below ↓</div>
+      </div>
+    </div>
+
+    <div class="callout">
+      <p><strong>Calibration against an exact oracle.</strong> An ideal-hash null predicts
+        <code>P(unique) = exp(−2^(48−n·k))</code>. It lands inside a 95% Wilson interval for
+        <span class="hl-accent">46 of 49 cells</span> — perfectly across the over- and
+        under-determined regions (44/44). The only three misses are exactly the edge cells,
+        where the structured LCG departs from an ideal hash. That's the phenomenon, caught
+        by the calibration, not a modelling error.</p>
+    </div>
+  </section>
+
+  <!-- 05 -->
+  <section>
+    <div class="sec-head">
+      <div class="sec-no">05</div>
+      <div>
+        <h2>H3 in three leak models</h2>
+        <p class="kicker">raw bits leaked vs bits usable by the round-off lattice · per call, 8-bit width</p>
+      </div>
+    </div>
+    <div class="sec-body prose">
+      <p>"Usable structure" is measurable: the Shannon entropy of one observation is the raw
+        information it carries; whether that information arrives as an <em>interval</em>
+        decides if the round-off box-CVP can consume it. Two ways to leak less usable
+        structure than a clean top-bits leak — and both real Java idioms hit them.</p>
+    </div>
+    <div class="leakrow">
+      <div class="leak">
+        <h3>top_bits(8)</h3>
+        <p class="struct">interval (prefix)</p>
+        <div class="bar"><div class="lab"><span>raw bits</span><span>7.99</span></div><div class="track"><div class="fill raw" style="width:99.9%"></div></div></div>
+        <div class="bar"><div class="lab"><span>box-usable</span><span>7.99</span></div><div class="track"><div class="fill use" style="width:99.9%"></div></div></div>
+        <p class="verdict">The Randar leak. Every bit lands as an interval the lattice reads directly.</p>
+      </div>
+      <div class="leak">
+        <h3>nextInt(odd 255)</h3>
+        <p class="struct">residue-class (mod odd)</p>
+        <div class="bar"><div class="lab"><span>raw bits</span><span>7.99</span></div><div class="track"><div class="fill raw" style="width:99.9%"></div></div></div>
+        <div class="bar"><div class="lab"><span>box-usable</span><span>0.00</span></div><div class="track"><div class="fill zero" style="width:0%"></div></div></div>
+        <p class="verdict">Same information — but a residue mod an odd bound is coprime to 2⁴⁸.
+          Round-off can't touch it; this is the elttam / <code>RandomStringUtils</code> case (HNP).</p>
+      </div>
+      <div class="leak">
+        <h3>bit_length(nextInt)</h3>
+        <p class="struct">interval (leading-bit; starved)</p>
+        <div class="bar"><div class="lab"><span>raw bits</span><span>1.99</span></div><div class="track"><div class="fill raw" style="width:24.9%"></div></div></div>
+        <div class="bar"><div class="lab"><span>box-usable</span><span>1.99</span></div><div class="track"><div class="fill use" style="width:24.9%"></div></div></div>
+        <p class="verdict">Right shape, starved: ~2 bits per call whatever the bound. The Minerva end — needs many observations.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 06 -->
+  <section>
+    <div class="sec-head">
+      <div class="sec-no">06</div>
+      <div>
+        <h2>Live demonstrations</h2>
+        <p class="kicker">every one verified against ground truth</p>
+      </div>
+    </div>
+
+    <div class="demos">
+      <div class="demo">
+        <div class="demo-top"><h3>Crack &amp; predict</h3><span class="chip">recovered</span></div>
+        <p class="cmd">demo 7338710 7668738 5563335</p>
+        <div class="flow">
+          <div class="step"><span class="n">in</span><span class="t">3 top-24-bit <code>nextFloat</code> measurements</span></div>
+          <div class="step"><span class="n">out</span><span class="t">next 3 → <span class="val">14073018</span> <span class="val">12069224</span> …</span></div>
+          <div class="step"><span class="n">out</span><span class="t">prev 3 → <span class="val">3077955</span> <span class="val">1916290</span> …</span></div>
+        </div>
+      </div>
+
+      <div class="demo">
+        <div class="demo-top"><h3>Retroactive stream</h3><span class="chip">verified</span></div>
+        <p class="cmd">retro --total 20 --offset 10</p>
+        <div class="flow">
+          <div class="step"><span class="n">in</span><span class="t">one <b>3-token</b> window, captured mid-stream</span></div>
+          <div class="step"><span class="n">out</span><span class="t"><b>10</b> tokens issued <em>before</em> the window, reconstructed</span></div>
+          <div class="step"><span class="n">out</span><span class="t"><b>7</b> forward tokens — all matched ground truth</span></div>
+        </div>
+      </div>
+
+      <div class="demo wide">
+        <div class="demo-top"><h3>The contrast: two victims, opposite corners of recoverability</h3><span class="chip">both verified</span></div>
+        <div class="contrast">
+          <div class="side">
+            <div class="who">java.util.Random — LCG</div>
+            <ul>
+              <li><b>~3 partial</b> outputs (top-24-bit <code>nextFloat</code>s)</li>
+              <li>recovered by <b>lattice round-off</b></li>
+              <li>degrades <em>gracefully</em> with leak width — the whole phase diagram above</li>
+            </ul>
+          </div>
+          <div class="side">
+            <div class="who">Python random — MT19937</div>
+            <ul>
+              <li><b>624 consecutive full</b> 32-bit outputs</li>
+              <li>recovered <b>exactly</b> by algebraic untempering</li>
+              <li>all-or-nothing: <em>partial</em> outputs break it entirely</li>
+            </ul>
+          </div>
+        </div>
+        <p class="cmd" style="margin-top:14px; margin-bottom:0">mt-demo --warmup 1000 &nbsp;→ predicted next 5, verified against stdlib</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 07 -->
+  <section>
+    <div class="sec-head">
+      <div class="sec-no">07</div>
+      <div>
+        <h2>The fold-in: a repoauditor detector</h2>
+        <p class="kicker">a shared, predictable generator crossing a trust boundary — invisible to SAST &amp; CVE feeds</p>
+      </div>
+    </div>
+    <div class="sec-body prose">
+      <p>The point of the harness is a seam. Weak-RNG token generation is a real class of bug
+        that dependency scanners and CVE feeds can't see — nothing is <em>vulnerable</em> in
+        the CVE sense; a safe primitive is simply used across a trust boundary. The lab folds
+        into <strong>repoauditor</strong> as a <code>weak_rng_adapter</code> in two halves.</p>
+    </div>
+    <div class="foldin">
+      <div class="card">
+        <span class="status-pill done">✓ built · reuses validated cracker</span>
+        <h3 style="margin-top:12px">demonstrate</h3>
+        <p><code>demonstrate_from_msb24</code> turns a suspected weak-RNG site into a
+          reproducible next/prev-token recovery — the same round-off path pinned by the
+          Randar vector. It emits a <code>RecoveryDemonstration</code>, a corroborating
+          source for severity licensing. It never sets severity itself.</p>
+      </div>
+      <div class="card">
+        <span class="status-pill prop">◐ proposed · OPT-036 · pending merge</span>
+        <h3 style="margin-top:12px">detect</h3>
+        <p><code>detect_in_source</code> finds the idioms in code — built inside repoauditor
+          against its live retrieval layer and <code>CandidateFinding</code> contract. It
+          proposes a conservative initial severity; repoauditor's own
+          <code>normalize/adjudicate</code> owns any upgrade.</p>
+      </div>
+    </div>
+    <div class="callout">
+      <p><strong>Honest baselines, throughout.</strong> Recovery from the odd-bound and
+        bit-length leaks is a disclosed capability gap — those need a Hidden-Number-Problem
+        lattice, not this lab's round-off box — recorded explicitly, never faked. The whole
+        harness is offline: it attacks a generator it instantiates itself. No network target,
+        no third-party system in scope.</p>
+    </div>
+  </section>
+
+  <footer>
+    <div class="prose" style="margin-bottom:22px">
+      <h3 style="font-family:'Fraunces',serif; font-size:1.15rem; font-weight:600; margin-bottom:4px">Reproduce this run</h3>
+      <p style="font-size:14.5px; margin-bottom:0">Every figure on this page traces to one seeded run.
+        The core path needs only <code>numpy</code>; <code>fpylll</code> unlocks the rest of the grid.</p>
+    </div>
+    <div class="repro">
+      <pre><span class="prompt">$</span> prng-lattice-lab validate
+<span class="prompt">$</span> prng-lattice-lab sweep  --trials 200 --seed 0 --db data/lab.db
+<span class="prompt">$</span> prng-lattice-lab report 1 --out report.md
+<span class="prompt">$</span> prng-lattice-lab retro  --total 20 --offset 10
+<span class="prompt">$</span> prng-lattice-lab mt-demo --warmup 1000
+<span class="prompt">$</span> prng-lattice-lab leaks  --bits 8
+<span class="prompt">$</span> pytest -q                    <span style="color:var(--muted)"># 58 passing · Randar vector pinned</span></pre>
+    </div>
+    <div class="foot-meta">
+      <span>run #1 · seed 0 · 200 trials/cell</span>
+      <span>lab v0.1.0</span>
+      <span>generated 2026-08-20</span>
+      <span>deterministic · gaps disclosed in-report</span>
+    </div>
+  </footer>
+</div>
+
+<script>
+  // ---- phase grid data (from report run #1, seed 0, 200 trials/cell) ----
+  // 'r' recovered (200/200) · ['e', successes] edge/ambiguous · 'u' underdetermined
+  const OBS  = [2, 3, 4, 6, 8, 12, 16];
+  const BITS = [2, 4, 8, 12, 16, 20, 24];
+  const CELLS = {
+    2:  ['u','u','u','u','u','u','u'],
+    4:  ['u','u','u','u','u',['e',35.0],'r'],
+    8:  ['u','u','u',['e',46.0],'r','r','r'],
+    12: ['u','u',['e',31.5],'r','r','r','r'],
+    16: ['u',['e',60.0],'r','r','r','r','r'],
+    20: ['u','r','r','r','r','r','r'],
+    24: [['e',21.5],'r','r','r','r','r','r'],
+  };
+
+  const grid = document.getElementById('phaseGrid');
+  const frag = document.createDocumentFragment();
+
+  // header row: corner + observation counts
+  const corner = document.createElement('div');
+  corner.className = 'col-h axis-corner';
+  corner.textContent = 'bits ↓';
+  frag.appendChild(corner);
+  OBS.forEach(o => {
+    const c = document.createElement('div');
+    c.className = 'col-h'; c.textContent = o;
+    frag.appendChild(c);
+  });
+
+  let i = 0;
+  BITS.forEach(b => {
+    const rh = document.createElement('div');
+    rh.className = 'row-h'; rh.textContent = b;
+    frag.appendChild(rh);
+    CELLS[b].forEach((cell, j) => {
+      const el = document.createElement('div');
+      const nk = b * OBS[j];
+      if (cell === 'r') {
+        el.className = 'cell rec';
+        el.title = `${b}×${OBS[j]}  n·k=${nk}  ·  recovered 200/200`;
+      } else if (cell === 'u') {
+        el.className = 'cell und';
+        el.title = `${b}×${OBS[j]}  n·k=${nk}  ·  underdetermined (no unique state)`;
+      } else {
+        el.className = 'cell edge';
+        el.textContent = cell[1] + '%';
+        el.title = `${b}×${OBS[j]}  n·k=${nk}  ·  edge — ${cell[1]}% unique, collisions present`;
+      }
+      el.style.animationDelay = (i * 9) + 'ms';
+      i++;
+      frag.appendChild(el);
+    });
+  });
+  grid.appendChild(frag);
+
+  // ---- theme toggle (respects the three-state model) ----
+  const btn = document.getElementById('themeToggle');
+  btn.addEventListener('click', () => {
+    const root = document.documentElement;
+    const cur = root.getAttribute('data-theme');
+    let next;
+    if (cur === 'dark') next = 'light';
+    else if (cur === 'light') next = 'dark';
+    else {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      next = prefersDark ? 'light' : 'dark';
+    }
+    root.setAttribute('data-theme', next);
+  });
+</script>

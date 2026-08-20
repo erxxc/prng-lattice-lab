@@ -70,6 +70,9 @@ config (typed)  ─▶  generate/  ─▶  recover/  ─▶  sweep/  ─▶  sto
   — non-consecutive observations (every stride-th call) reuse the same machinery with
   a^stride as the per-step multiplier; the reduced-basis cache keys on (n, stride).
   `call_stride=1` is byte-identical to the consecutive path.
+- `noise` (on `LeakProfile`, `top_bits_bounds`, `recover_pre_states_top_bits`) — a
+  bounded measurement error: the box widens by `noise`, recovery verifies within it.
+  Completeness holds; ambiguity grows with noise, and over-determination buys tolerance.
 
 ### `recover/enumerate.py`  — complete
 - `enumerate_box(reduced_basis, bounds, node_budget)` — COMPLETE enumeration of the
@@ -77,10 +80,13 @@ config (typed)  ─▶  generate/  ─▶  recover/  ─▶  sweep/  ─▶  sto
   is missed). Backed by fpylll's enumeration. Honours a node budget; raises
   `BudgetExceeded` (never a truncated set) when completeness can't be certified.
 
-### `generate/`  — TOP_BITS complete
-- `leak.observe(rng, profile)` — TOP_BITS complete; NEXTINT_ODD and BIT_LENGTH
-  pending. `item_drop_to_floats` — Randar item-drop inversion, complete.
-- `harness.make_trials` — reproducible `(true_pre_call_state, observations)` trials.
+### `generate/`  — all three leak models wired
+- `leak.observe(rng, profile)` — all three models produce real measurements:
+  TOP_BITS (interval), NEXTINT_ODD (residue class mod odd bound), BIT_LENGTH (starved
+  interval). All share the strided (`call_stride`) geometry via `_observe`.
+  `item_drop_to_floats` — Randar item-drop inversion, complete.
+- `harness.make_trials` — reproducible `(true_pre_call_state, observations)` trials,
+  with optional measurement `noise`.
 
 ### `sweep/grid.py`  — complete; scores the whole grid
 - `run_cell` routing: the 24×3 anchor → `roundoff` (validated, fpylll-free); a cell
@@ -104,20 +110,29 @@ config (typed)  ─▶  generate/  ─▶  recover/  ─▶  sweep/  ─▶  sto
   n·k=48 edge is where it and the structured LCG disagree. Plus `reliability_table`,
   `recovery_by_total_bits` (H1 edge), `recovery_boundary`. All accept `CellResult`
   objects or `store.list_cells` dict rows.
+- `leakage.compare_leak_models` (`prng-lattice-lab leaks`) — confirms **H3** on our own
+  data: per-call observation entropy (raw bits) + constraint structure (interval /
+  residue-class / starved) + box-usable bits. Top-bits ≈ k usable bits; nextInt(odd)
+  ≈ k raw bits but 0 box-usable (residue → HNP); bit-length ≈ 2 bits (starved).
 
 ### `store/db.py`  — sole DB owner, minimal but real
 - SQLite. `record_sweep_run`, `record_cell`, `list_cells`. Validates every write
   against the schema (required-field check; upgrade to `jsonschema` is a drop-in).
 - Migrations in `store/migrations/*.sql`, applied in order on connect.
 
-### `report/synthesis.py`  — deterministic render complete; prose pending
+### `report/synthesis.py`  — deterministic render + optional narrative, both wired
 - `render_markdown` — pure read projection over stored cells: phase grid (unique-
   recovery rate), margin grid, the recoverability-edge table (ambiguous cells and
   their candidate-count range), the H1 recoverability boundary and the exact-oracle
   calibration/coverage section (both via `characterize/`), the underdetermined-region
   note, and disclosed gaps. No model, every number traces to a `SweepCell`.
-- `synthesize_narrative(prompt_path=...)` — LLM prose hook; loads the versioned
-  prompt, tags output with its version. Not wired (no key assumed).
+- `synthesize_narrative(prompt_path=..., run_meta=..., model=...)` — LLM prose pass
+  (`report --narrate`): loads the versioned prompt as the system instruction, passes
+  the rendered deterministic report as the only citable evidence, and prefixes a
+  machine-checkable attribution line (prompt version + model + run). Needs
+  `ANTHROPIC_API_KEY` and the `narrative` extra; either absent raises
+  `NarrativeUnavailable`, which the CLI discloses in-report — never faked prose
+  (rules 7 & 8). Both branches are tested (fake-SDK injection for the with-key path).
 - Takes `schema` and `prompt` as explicit inputs (the requested contract).
 
 ### `adapt/`  — contract complete; detect half pending

@@ -144,16 +144,19 @@ def affine_offsets(n: int, call_stride: int = 1) -> list[int]:
 
 
 def top_bits_bounds(observations: list[int], bits_per_call: int,
-                    call_stride: int = 1) -> list[tuple[int, int]]:
+                    call_stride: int = 1, noise: int = 0) -> list[tuple[int, int]]:
     """Per-coordinate half-open box [lo_t, hi_t) implied by a TOP_BITS leak.
 
     Coordinate t = s_{1+t*stride} - o_t, and top-k bits == observations[t] pins that
     state to [y*w, y*w + w) with w = 2**(48-k); subtracting the strided offset o_t
-    gives the box.
+    gives the box. With measurement `noise`, the true top-k is only within `noise` of
+    the observed y, so the box widens to [(y-noise)*w, (y+noise+1)*w) -- more lattice
+    points, i.e. recovery degrades to enumeration/ambiguity. noise=0 is the exact box.
     """
     w = 1 << (48 - bits_per_call)
     offs = affine_offsets(len(observations), call_stride)
-    return [(y * w - offs[t], y * w - offs[t] + w) for t, y in enumerate(observations)]
+    return [((y - noise) * w - offs[t], (y + noise + 1) * w - offs[t])
+            for t, y in enumerate(observations)]
 
 
 def margin_top_bits(observations: list[int], bits_per_call: int,
@@ -211,25 +214,28 @@ def recover_pre_states_top_bits(
     bits_per_call: int,
     *,
     call_stride: int = 1,
+    noise: int = 0,
     node_budget: int = 1_000_000,
 ) -> list[int]:
     """Every pre-call state (s_0) consistent with a TOP_BITS leak, consecutive
-    (call_stride=1) or strided (>1, i.e. every stride-th call observed).
+    (call_stride=1) or strided (>1, i.e. every stride-th call observed), and exact
+    (noise=0) or noisy (each observed top-k within `noise` of the truth).
 
     Complete: one element is a unique recovery; more than one flags genuine
-    collisions (the leak does not distinguish those states). Each candidate is
-    re-stepped through the LCG as a garbage guard -- advancing `call_stride` steps
-    between observations -- before it is returned. The pre-call state is always one
-    step back from the first observed state, regardless of stride.
+    collisions (the leak does not distinguish those states) -- and `noise` widens the
+    box, so ambiguity grows with it. Each candidate is re-stepped through the LCG as a
+    garbage guard -- advancing `call_stride` steps between observations, and allowing
+    each observed top-k to differ from the candidate by up to `noise` -- before it is
+    returned. The pre-call state is always one step back from the first observed state.
     """
-    bounds = top_bits_bounds(observations, bits_per_call, call_stride)
+    bounds = top_bits_bounds(observations, bits_per_call, call_stride, noise)
     shift = 48 - bits_per_call
     pre: set[int] = set()
     for x in solve_box(bounds, call_stride=call_stride, node_budget=node_budget):
         s = x
         ok = True
         for i, y in enumerate(observations):
-            if (s >> shift) != y:
+            if abs((s >> shift) - y) > noise:
                 ok = False
                 break
             if i < len(observations) - 1:

@@ -114,13 +114,17 @@ This is a **weekend harness with a clean fold-in seam**, not a second product.
 Known temptations to defer, not chase mid-session:
 - ~~Wiring `recover/lattice.solve_box` + `recover/enumerate` for the whole grid.~~
   **Done** (2026-08-18) — the general solver is wired and the sweep scores the full
-  grid honestly. Enumeration is fpylll's complete box enumeration; the `nextint_odd`
-  / `bit_length` leak models and non-consecutive (`call_stride>1`) geometries remain
-  deferred.
-- The `nextint_odd` (elttam) and `bit_length` (Minerva) leak models.
+  grid honestly. Enumeration is fpylll's complete box enumeration.
+- ~~The `nextint_odd` (elttam) and `bit_length` (Minerva) leak models.~~ **Done**
+  (2026-08-20) — wired on the generate side + characterised (`characterize/leakage.py`,
+  `prng-lattice-lab leaks`), confirming H3. Their RECOVERY stays a disclosed gap (an
+  HNP lattice, not the round-off box); the sweep records that gap for non-TOP_BITS cells.
 - Full Randar coordinate inversion (Woodland-region math) — out of scope unless the
   goal changes to a full reproduction.
-- Live-model narrative synthesis in `report/synthesis.py`.
+- ~~Live-model narrative synthesis in `report/synthesis.py`.~~ **Done** (2026-08-20) —
+  `synthesize_narrative` calls the Messages API over the versioned prompt + the
+  deterministic report (`report --narrate`); without a key/SDK it raises
+  `NarrativeUnavailable` and the CLI discloses the skip in-report (never faked prose).
 
 **repoauditor's own DoD/UAT completion gate takes priority over this.** The
 `weak_rng_adapter` is a strong *post-DoD* first feature; building the harness
@@ -139,8 +143,13 @@ into breadth, stop and record the item in `docs/RESEARCH.md` backlog instead.
 The general-grid solver (originally deferred beyond this DoD) is now wired — the
 sweep draws the full phase boundary and reports the recoverability edge as a
 candidate-count range. Non-consecutive observations (`call_stride>1`) are now wired
-too, and the MT19937 comparison victim is wired (`mt19937.py`). Still explicitly
-deferred: odd-bound & bit-length leak models, noise injection, live narrative synthesis.
+too, and the MT19937 comparison victim is wired (`mt19937.py`). Noise injection is
+wired too (`LeakProfile.noise`), and the optional live narrative pass is wired
+(`report --narrate`, graceful+disclosed without a key). The odd-bound & bit-length
+leak models are wired on the generate side and characterised (H3 confirmed,
+`prng-lattice-lab leaks`); only their HNP-lattice RECOVERY remains a disclosed gap.
+Nothing in the backlog is now deferred except full Randar coordinate inversion (out
+of scope) and — post-DoD — the repoauditor OPT-036 governance admission.
 
 ## Commands
 
@@ -148,9 +157,11 @@ deferred: odd-bound & bit-length leak models, noise injection, live narrative sy
 prng-lattice-lab validate                         # Randar vector sanity
 prng-lattice-lab sweep --trials 200               # run the grid, persist run+cells
 prng-lattice-lab report <run_id> --schema ... --prompt ... --out report.md
+prng-lattice-lab report <run_id> --narrate         # + optional LLM prose (needs key; gap-disclosed without)
 prng-lattice-lab demo 7338710 7668738 5563335     # crack + predict next/prev
 prng-lattice-lab retro --total 20 --offset 10     # reconstruct a whole stream from one 3-token window
 prng-lattice-lab mt-demo --warmup 1000            # MT19937 contrast: clone stdlib random from 624 outputs
+prng-lattice-lab leaks --bits 8                   # characterise the 3 leak models; confirm H3
 pytest -q                                         # correctness gate
 ```
 
@@ -158,5 +169,7 @@ pytest -q                                         # correctness gate
 
 Python ≥3.11. Core path needs only `numpy` (and stdlib). `fpylll` is optional and
 only required for starved-leak cells; its absence is a recorded capability gap,
-never a silent fallback. `jsonschema` optional (store falls back to required-field
+never a silent fallback. `anthropic` optional (only for `report --narrate`; without
+it the deterministic report is complete and the prose skip is disclosed).
+`jsonschema` optional (store falls back to required-field
 checks). No deep learning, no network calls in the core path.

@@ -22,9 +22,14 @@ common Java token-generation idioms fall on the exploitable side?
   complete box enumeration reports this as a candidate-count range (mean ≈1.4–2.0
   consistent states) rather than collapsing to one answer — the recoverability
   edge is a band of ambiguity, not a clean line.
-- **H3 — Odd bounds leak less usable structure.** `nextInt(odd)` yields weaker
-  per-call constraints than power-of-two bounds (the elttam / `RandomStringUtils`
-  result). *Confirm on our own data.*
+- **H3 — Odd bounds leak less usable structure. ✔ CONFIRMED** (`prng-lattice-lab
+  leaks`; `characterize/leakage.py`). Measured per single call at a common 8-bit
+  width: top-bits carries ~8.0 box-usable bits (interval); `nextInt(odd 255)` carries
+  ~8.0 RAW bits but **0** box-usable (a residue class mod an odd bound — coprime to the
+  2⁴⁸ modulus, so it needs an HNP lattice, not the round-off box); bit-length carries
+  only ~2.0 bits/call (a starved interval). Two distinct ways to leak less USABLE
+  structure than a clean top-bits leak of the same width — exactly the elttam /
+  Minerva ends of the family.
 
 ## Method
 1. Model `java.util.Random` exactly (`lcg.py`). ✔ validated.
@@ -58,12 +63,22 @@ appendix (run id, seed, trial count, lab + prompt versions).
 - ~~Wire `recover/lattice.solve_box` + `recover/enumerate` for the full grid.~~
   **Done 2026-08-18** (fpylll complete box enumeration; full grid scored, with the
   recoverability edge reported as a candidate-count range).
-- `nextint_odd` and `bit_length` leak models (elttam / Minerva ends of the family).
+- ~~`nextint_odd` and `bit_length` leak models (elttam / Minerva ends of the family).~~
+  **Done 2026-08-20** — both wired on the GENERATE side (`generate/leak.py`) and
+  characterised (`characterize/leakage.py`, `prng-lattice-lab leaks`), confirming H3
+  (see hypotheses). Their RECOVERY stays a disclosed capability gap: a residue class
+  (odd bound) / starved interval (bit-length) needs an HNP lattice, not this lab's
+  round-off box-CVP. The sweep records that gap explicitly for non-TOP_BITS cells.
 - ~~Non-consecutive observations (`call_stride>1`): compose `a` with itself per step.~~
   **Done 2026-08-19** (`recover.lattice.strided_lcg`; the whole recover path takes a
   `call_stride`, keying the reduced basis on (n, stride) and using a^stride as the
   per-step multiplier; the grid no longer gaps strided cells).
-- Noise injection → force enumeration → bridge to real side-channel data.
+- ~~Noise injection → force enumeration → bridge to real side-channel data.~~
+  **Done 2026-08-19** (`LeakProfile.noise`; recovery widens the box by the noise bound
+  and verifies within it). Finding — noise is a third axis: over-determination buys
+  noise tolerance. At the n·k=48 edge, noise=1 already blows candidates from ~1.5 to
+  ~27; a far over-determined cell (n·k=96) stays uniquely recoverable at noise=12.
+  Enumeration stays complete throughout (truth never dropped).
 - ~~MT19937 comparison victim (624-output exact inversion; same capability, different math).~~
   **Done 2026-08-19** (`mt19937.py`: temper/untemper/predict_next; `prng-lattice-lab
   mt-demo`; validated against Python's stdlib MT19937). Finding — the two victims sit
@@ -77,6 +92,13 @@ appendix (run id, seed, trial count, lab + prompt versions).
   `demonstrate_retroactive`; `prng-lattice-lab retro` CLI). A captured 3-token window
   reconstructs the entire issued stream, tokens BEFORE the window included, verified
   against ground truth.
+- ~~Live-model narrative synthesis (`report/synthesis.synthesize_narrative`).~~
+  **Done 2026-08-20** (`prng-lattice-lab report --narrate`): the versioned prompt is
+  the system instruction, the deterministic report is the only citable evidence, and
+  a machine-checkable attribution line (prompt version + model + run) is prefixed.
+  Without a key/SDK it raises `NarrativeUnavailable` and the CLI discloses the skip
+  in-report — the deterministic report is always the report of record; prose is never
+  faked (rules 7 & 8). Both branches tested (fake-SDK injection for the with-key path).
 - Full Randar coordinate inversion (Woodland-region math) — only if the goal
   changes to a full reproduction.
 

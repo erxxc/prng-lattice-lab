@@ -46,3 +46,13 @@ def test_strided_cell_recovers_through_the_general_solver():
         20, RecoverMethod.AUTO, seed=0)
     assert cell.outcome == "recovered" and cell.successes == cell.trials
     assert cell.capability_gap is None
+
+
+def test_noisy_edge_cell_degrades_to_ambiguous():
+    # Measurement noise widens the box; an n*k=48 edge cell degrades from (partly)
+    # unique to ambiguous, and the enumeration stays complete (no completeness WARNING).
+    cell = run_cell(
+        LeakProfile(model=LeakModel.TOP_BITS, bits_per_call=16, num_observations=3, noise=2),
+        12, RecoverMethod.AUTO, seed=0)
+    assert cell.outcome == "ambiguous" and (cell.mean_candidates or 0) > 1
+    assert "WARNING" not in (cell.capability_gap or "")

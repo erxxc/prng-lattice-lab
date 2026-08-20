@@ -42,6 +42,24 @@ class LeakProfile:
     bits_per_call: int = 24              # e.g. 24 for nextFloat, log2(bound) for pow2 nextInt
     num_observations: int = 3            # consecutive calls observed
     call_stride: int = 1                 # 1 = consecutive; >1 = known gaps between observed calls
+    noise: int = 0                       # max |error| on each top-k observation (0 = exact);
+                                         # recovery widens the box by this bound (see recover.lattice)
+    bound: int | None = None             # nextInt bound for NEXTINT_ODD / BIT_LENGTH; None -> a
+                                         # default derived from bits_per_call (see effective_bound)
+
+    def effective_bound(self) -> int:
+        """nextInt bound used by the NEXTINT_ODD / BIT_LENGTH leak models.
+
+        Defaults to a canonical bound of the target width: the largest ODD value with
+        `bits_per_call` bits for NEXTINT_ODD (worst case for a power-of-two-modulus
+        lattice -- coprime to 2), and 2**bits_per_call for BIT_LENGTH. Ignored by
+        TOP_BITS. An explicit `bound` overrides (e.g. elttam's RandomStringUtils bounds).
+        """
+        if self.bound is not None:
+            return self.bound
+        if self.model is LeakModel.NEXTINT_ODD:
+            return (1 << self.bits_per_call) - 1     # largest odd of this bit width
+        return 1 << self.bits_per_call               # BIT_LENGTH: a clean power-of-two range
 
     def total_leaked_bits(self) -> int:
         return self.bits_per_call * self.num_observations

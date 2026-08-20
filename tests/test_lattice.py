@@ -110,3 +110,27 @@ def test_strided_observations_recover():
         for t in trials:
             pre = lattice.recover_pre_states_top_bits(t.observations, 16, call_stride=stride)
             assert t.true_pre_call_state in pre
+
+
+def _noisy_rows(k, n, noise, count=12):
+    trials = make_trials(
+        LeakProfile(model=LeakModel.TOP_BITS, bits_per_call=k, num_observations=n,
+                    noise=noise), count, seed=2)
+    return [(lattice.recover_pre_states_top_bits(t.observations, k, noise=noise),
+             t.true_pre_call_state) for t in trials]
+
+
+def test_noise_keeps_completeness():
+    # Under measurement noise the box widens; the true state must STILL be enumerated
+    # (completeness), it just may no longer be unique.
+    for c, truth in _noisy_rows(16, 3, noise=2):
+        assert truth in c
+
+
+def test_over_determination_buys_noise_tolerance():
+    # A far over-determined cell recovers uniquely even under noise the edge can't take.
+    for c, truth in _noisy_rows(24, 4, noise=6):
+        assert c == [truth]                       # unique + correct
+    # The n*k=48 edge, same noise, degrades to genuine ambiguity (wider box, collisions).
+    edge = _noisy_rows(16, 3, noise=2)
+    assert any(len(c) > 1 for c, _ in edge)

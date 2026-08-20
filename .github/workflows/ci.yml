@@ -1,0 +1,33 @@
+name: gate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install core (numpy + pytest + jsonschema)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e '.[dev,schema]'
+
+      # Optional: the general-solver suite (fpylll + cysignals). Best-effort so the
+      # core gate stays green where no wheel exists; the fpylll-guarded tests skip.
+      - name: Install lattice extras (optional)
+        continue-on-error: true
+        run: pip install '.[lattice]'
+
+      - name: Run the correctness gate
+        run: pytest -q

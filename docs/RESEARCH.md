@@ -64,7 +64,14 @@ appendix (run id, seed, trial count, lab + prompt versions).
   `call_stride`, keying the reduced basis on (n, stride) and using a^stride as the
   per-step multiplier; the grid no longer gaps strided cells).
 - Noise injection → force enumeration → bridge to real side-channel data.
-- MT19937 comparison victim (624-output exact inversion; same capability, different math).
+- ~~MT19937 comparison victim (624-output exact inversion; same capability, different math).~~
+  **Done 2026-08-19** (`mt19937.py`: temper/untemper/predict_next; `prng-lattice-lab
+  mt-demo`; validated against Python's stdlib MT19937). Finding — the two victims sit
+  at opposite corners of recoverability: java.util.Random needs a FEW PARTIAL outputs
+  (3 top-24-bit nextFloats, lattice round-off) and degrades gracefully with leak
+  width; MT19937 needs 624 CONSECUTIVE FULL 32-bit outputs, then recovery is EXACT and
+  algebraic (untempering), but partial (top-bits) leakage breaks it. "Few outputs,
+  tolerant of partial width" vs "all-or-nothing on width, but many outputs."
 - ~~Retroactive demonstration: recover "past" tokens from a captured sequence.~~
   **Done 2026-08-18** (`weak_rng_adapter.reconstruct_stream` /
   `demonstrate_retroactive`; `prng-lattice-lab retro` CLI). A captured 3-token window

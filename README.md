@@ -17,6 +17,7 @@ pytest -q                                       # correctness gate (8 tests)
 prng-lattice-lab validate                       # Randar published vector
 prng-lattice-lab demo 7338710 7668738 5563335   # crack + predict next/prev tokens
 prng-lattice-lab retro --total 20 --offset 10   # reconstruct a whole token stream from one captured window
+prng-lattice-lab mt-demo --warmup 1000          # MT19937 contrast: clone Python's random from 624 outputs
 prng-lattice-lab sweep --trials 200             # run the phase-diagram grid
 prng-lattice-lab report 1 --out report.md       # deterministic report from stored run
 ```
@@ -27,10 +28,13 @@ prng-lattice-lab report 1 --out report.md       # deterministic report from stor
 | `java.util.Random` model + forward/back stepping | ✔ validated |
 | 3×nextFloat round-off cracker (Randar core) | ✔ validated (published vector) |
 | general-grid solver (fpylll box enumeration) | ✔ wired — full grid, complete enumeration |
-| sweep + store + deterministic report | ✔ recovered / ambiguous / underdetermined, 0 gaps with fpylll |
+| non-consecutive (`call_stride`) observations | ✔ wired |
+| sweep + characterize + deterministic report | ✔ phase diagram, margin surface, exact-oracle calibration |
+| retroactive token-stream reconstruction | ✔ verified (`retro`) |
+| MT19937 comparison victim (exact untempering) | ✔ validated vs stdlib (`mt-demo`) |
 | repoauditor `weak_rng_adapter` demonstration path | ✔ reuses validated cracker |
-| odd-bound / bit-length leak models, non-consecutive leaks | ☐ specified |
-| detect-in-source half of the adapter | ☐ built inside repoauditor |
+| repoauditor `detect_in_source` (OPT-036) | ◑ built inside repoauditor, pending merge |
+| odd-bound / bit-length leak models, noise injection | ☐ specified |
 
 Install the general solver with `pip install -e '.[lattice]'` (brings in
 `fpylll` + `cysignals`). Without it the round-off anchor still scores and the

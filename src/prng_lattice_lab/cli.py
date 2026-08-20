@@ -120,6 +120,28 @@ def cmd_retro(args) -> int:
     return 0 if (demo.recovered_state_present and demo.verified) else 1
 
 
+def cmd_mt_demo(args) -> int:
+    import random
+
+    from prng_lattice_lab import mt19937
+    r = random.Random(args.seed)
+    for _ in range(args.warmup):
+        r.getrandbits(32)
+    observed = [r.getrandbits(32) for _ in range(624)]
+    predicted = mt19937.predict_next(observed, args.predict)
+    actual = [r.getrandbits(32) for _ in range(args.predict)]
+    print(json.dumps({
+        "victim": "python stdlib random.Random (MT19937)",
+        "observations_used": 624,
+        "predicted_next": predicted,
+        "verified": predicted == actual,
+        "contrast": ("MT19937 needs 624 consecutive FULL 32-bit outputs, then exact "
+                     "untempering; java.util.Random needs ~3 PARTIAL (top-24-bit) "
+                     "outputs via lattice round-off"),
+    }, indent=2))
+    return 0 if predicted == actual else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="prng-lattice-lab", description=__doc__)
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -152,6 +174,13 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--offset", type=int, default=10, help="stream index of the captured window")
     sp.add_argument("--seed", type=int, default=0, help="seed picking the hidden internal state")
     sp.set_defaults(func=cmd_retro)
+
+    sp = sub.add_parser("mt-demo", help="MT19937 comparison: clone Python's random from "
+                                        "624 outputs and predict the next (exact untempering)")
+    sp.add_argument("--seed", type=int, default=0, help="seed for the stdlib MT19937 victim")
+    sp.add_argument("--warmup", type=int, default=1000, help="outputs to advance before capture")
+    sp.add_argument("--predict", type=int, default=5, help="how many next outputs to predict")
+    sp.set_defaults(func=cmd_mt_demo)
     return p
 
 

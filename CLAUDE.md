@@ -139,8 +139,8 @@ into breadth, stop and record the item in `docs/RESEARCH.md` backlog instead.
 The general-grid solver (originally deferred beyond this DoD) is now wired — the
 sweep draws the full phase boundary and reports the recoverability edge as a
 candidate-count range. Non-consecutive observations (`call_stride>1`) are now wired
-too. Still explicitly deferred: odd-bound & bit-length leak models, noise injection,
-MT19937 comparison, live narrative synthesis.
+too, and the MT19937 comparison victim is wired (`mt19937.py`). Still explicitly
+deferred: odd-bound & bit-length leak models, noise injection, live narrative synthesis.
 
 ## Commands
 
@@ -150,6 +150,7 @@ prng-lattice-lab sweep --trials 200               # run the grid, persist run+ce
 prng-lattice-lab report <run_id> --schema ... --prompt ... --out report.md
 prng-lattice-lab demo 7338710 7668738 5563335     # crack + predict next/prev
 prng-lattice-lab retro --total 20 --offset 10     # reconstruct a whole stream from one 3-token window
+prng-lattice-lab mt-demo --warmup 1000            # MT19937 contrast: clone stdlib random from 624 outputs
 pytest -q                                         # correctness gate
 ```
 

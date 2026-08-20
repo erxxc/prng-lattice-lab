@@ -34,6 +34,14 @@ config (typed)  ─▶  generate/  ─▶  recover/  ─▶  sweep/  ─▶  sto
   bits, odd bounds bias which bits survive (the elttam case).
 - `floats_to_msb24` — recover the exact 24-bit measurements from nextFloat outputs.
 
+### `mt19937.py`  — comparison victim, complete
+- MT19937 (Python `random`, Ruby, PHP) as the OPPOSITE corner of recoverability.
+  `temper`/`untemper` (exact inverses), `recover_state` / `predict_next` — clone the
+  generator from 624 CONSECUTIVE FULL 32-bit outputs by untempering, then run the
+  twist recurrence forward. No lattice/fpylll. Validated against Python's stdlib MT
+  (`test_mt19937.py`; `prng-lattice-lab mt-demo`). The contrast with the LCG (few
+  partial outputs, graceful degradation) is the research point.
+
 ### `recover/roundoff.py`  — complete + validated
 - `crack_three_floats_msb(m1,m2,m3)` → post-first-step state, or `None` (garbage
   guard). Hard-codes the LLL-reduced basis + change-of-basis for `java.util.Random`.

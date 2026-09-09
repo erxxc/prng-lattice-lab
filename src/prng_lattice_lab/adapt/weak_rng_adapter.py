@@ -33,6 +33,27 @@ _RANDAR_CITE = Citation(
     locator="https://github.com/spawnmason/randar-explanation#lattice-reduction",
     note="Truncated-LCG state recovery via LLL round-off; method basis.",
 )
+_ELTTAM_CITE = Citation(
+    source="elttam/cracking-java-randomstringutils",
+    locator="https://www.elttam.com/blog/cracking-java-randomstringutils/",
+    note="nextInt(odd bound) residue leak (RandomStringUtils); recovered here by recover/residue.",
+)
+
+
+class AmbiguousRecovery(RuntimeError):
+    """More than one java.util.Random state is consistent with the captured window.
+    Raised instead of picking one (rule 8); `candidates` is the count."""
+
+    def __init__(self, candidates: int):
+        super().__init__(f"{candidates} consistent states; window too short to disambiguate")
+        self.candidates = candidates
+
+
+def default_window_nextint_odd(bound: int, slack_bits: float = 8.0) -> int:
+    """Smallest window of nextInt(bound) tokens carrying >= 48 + slack bits, so a
+    unique recovery is expected (expected spurious states ~ 2**-slack)."""
+    import math
+    return max(1, math.ceil((48.0 + slack_bits) / math.log2(bound)))
 
 
 def demonstrate_from_msb24(observations: list[int], predict_k: int = 3) -> RecoveryDemonstration:
@@ -125,6 +146,83 @@ def demonstrate_retroactive(true_pre_stream_state: int, total_tokens: int,
         recovered_state_present=True,
         predicted_prev=recon[:window_offset],                       # issued BEFORE the window
         predicted_next=recon[window_offset + window_size:],         # issued AFTER the window
+        verified=(recon == issued),
+    )
+
+
+def demonstrate_from_nextint_odd(observations: list[int], bound: int,
+                                 predict_k: int = 3) -> RecoveryDemonstration:
+    """Given consecutive nextInt(bound) outputs for an ODD bound (the RandomStringUtils
+    idiom), recover the state via recover.residue and predict the next/prev K outputs.
+    Raises AmbiguousRecovery if the window leaves >1 consistent state (never guesses).
+    Needs fpylll once (the cached 31-bit basis reduction)."""
+    from prng_lattice_lab.recover import residue
+    if not observations:
+        return RecoveryDemonstration(observations_used=0, recovered_state_present=False)
+    pre, _ = residue.recover_pre_states_nextint_odd(observations, bound)
+    if not pre:
+        return RecoveryDemonstration(observations_used=len(observations),
+                                     recovered_state_present=False)
+    if len(pre) > 1:
+        raise AmbiguousRecovery(len(pre))
+    gen = JavaRandom.from_internal_state(pre[0])
+    for _ in observations:                      # replay the window (rejections included)
+        gen.next_int(bound)
+    predicted_next = [gen.next_int(bound) for _ in range(predict_k)]
+    # earlier tokens: step back one call at a time and re-emit (no rejection modelling
+    # backwards -- a rejected draw would have consumed an extra state; the replay above
+    # guards the forward direction, the caller verifies the backward one)
+    predicted_prev: list[int] = []
+    s = pre[0]
+    for _ in range(predict_k):
+        s = step_back(s)
+        predicted_prev.append(JavaRandom.from_internal_state(s).next_int(bound))
+    predicted_prev.reverse()
+    return RecoveryDemonstration(
+        observations_used=len(observations), recovered_state_present=True,
+        predicted_next=predicted_next, predicted_prev=predicted_prev, verified=False)
+
+
+def reconstruct_stream_nextint_odd(window: list[int], offset: int, total_length: int,
+                                   bound: int) -> list[int] | None:
+    """Reconstruct an ENTIRE stream of nextInt(bound) tokens (odd bound) from a captured
+    window at `offset`. Returns None if no consistent state exists; raises
+    AmbiguousRecovery if more than one does. Assumes one state step per token (true
+    unless Java's rejection loop fired inside the stream, which the caller's
+    verification against ground truth would expose)."""
+    from prng_lattice_lab.recover import residue
+    if not window or offset < 0 or offset + len(window) > total_length:
+        return None
+    pre, _ = residue.recover_pre_states_nextint_odd(window, bound)
+    if not pre:
+        return None
+    if len(pre) > 1:
+        raise AmbiguousRecovery(len(pre))
+    s = pre[0]                                  # state BEFORE the window's first token
+    for _ in range(offset):                     # rewind to before the stream's first token
+        s = step_back(s)
+    gen = JavaRandom.from_internal_state(s)
+    return [gen.next_int(bound) for _ in range(total_length)]
+
+
+def demonstrate_retroactive_nextint_odd(true_pre_stream_state: int, total_tokens: int,
+                                        window_offset: int, bound: int,
+                                        window_size: int | None = None) -> RecoveryDemonstration:
+    """Self-contained, VERIFIED retroactive demonstration for nextInt(odd bound) tokens
+    (the RandomStringUtils case): a captured window recovers every token issued before
+    and after it. `verified` is an exact check against the issued stream."""
+    window_size = window_size or default_window_nextint_odd(bound)
+    gen = JavaRandom.from_internal_state(true_pre_stream_state)
+    issued = [gen.next_int(bound) for _ in range(total_tokens)]
+    window = issued[window_offset:window_offset + window_size]
+    recon = reconstruct_stream_nextint_odd(window, window_offset, total_tokens, bound)
+    if recon is None:
+        return RecoveryDemonstration(observations_used=window_size, recovered_state_present=False)
+    return RecoveryDemonstration(
+        observations_used=window_size,
+        recovered_state_present=True,
+        predicted_prev=recon[:window_offset],
+        predicted_next=recon[window_offset + window_size:],
         verified=(recon == issued),
     )
 

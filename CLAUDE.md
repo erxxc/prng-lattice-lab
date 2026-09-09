@@ -23,8 +23,10 @@ token-generation idioms fall on the exploitable side?
 ```
 generate/ ─▶ recover/ ─▶ sweep/ ─▶ characterize/ ─▶ (report/  | adapt/)
  leak models  lattice*    grid       margin+calib*    deterministic  repoauditor
- + harness    roundoff*   driver                       report        fold-in
-              enumerate*
+ + harness    roundoff*   (per       leakage*          report        fold-in
+              enumerate*   model)
+              residue*
+              starved*
 ```
 
 `*` complete and validated · `†` specified, not yet wired.
@@ -34,6 +36,19 @@ is now wired: with `fpylll` present the sweep scores the whole grid, classifying
 each cell as recovered / ambiguous (genuine collisions at the recoverability edge)
 / underdetermined (n·k < 48). Without `fpylll` only the round-off anchor scores and
 the rest record honest capability gaps.
+
+All three leak models are recovered, each by a solver that is COMPLETE for its
+model (`sweep --model ...` draws one phase diagram per model):
+* `top_bits` → the box lattice (`recover/lattice`, round-off / enumeration);
+* `nextint_odd` → `recover/residue`: split the state into its low 17 bits (their own
+  LCG mod 2^17, enumerated as 2^17 vectorised slices) and a 31-bit top half that
+  obeys a truncated-LCG box problem per slice; a certified round-off (worst-case
+  reduced-coordinate radius) enumerates every in-box point. Classified on realized
+  information n·log2(bound), not n·k;
+* `bit_length` → `recover/starved`: keep only observations worth ≥2 bits (a 1-bit
+  observation cannot pay for its lattice dimension), build the irregular-gap lattice,
+  enumerate the box completely, replay-filter against all observations. Feasibility
+  (underdetermined / infeasible-within-budget) is decided and disclosed per trial.
 
 ## Non-negotiables (inherited from repoauditor; keep them identical so the fold-in is native)
 
@@ -85,8 +100,11 @@ Any change to `lcg.py` transition constants or bit-extraction, to
 construction (`build_basis` / offsets / the round-off transform), must keep these
 passing. If you touch the lattice math, re-run `pytest` before anything else. The
 round-trip property test (3000 trials, exact-leak → 100% recovery) is the other
-guardrail. `test_lattice`/`test_sweep` skip without `fpylll`; `test_lcg`,
-`test_roundoff`, `test_store` are the fpylll-free core gate.
+guardrail. `tests/test_residue.py` and `tests/test_starved.py` pin the same
+completeness property for the odd-bound and bit-length solvers (truth always in the
+returned set; collisions surface as >1 candidate; feasibility refusals are explicit).
+`test_lattice`/`test_sweep`/`test_residue`/`test_starved` skip without `fpylll`;
+`test_lcg`, `test_roundoff`, `test_store` are the fpylll-free core gate.
 
 ## The repoauditor fold-in — rules of engagement
 
@@ -117,8 +135,9 @@ Known temptations to defer, not chase mid-session:
   grid honestly. Enumeration is fpylll's complete box enumeration.
 - ~~The `nextint_odd` (elttam) and `bit_length` (Minerva) leak models.~~ **Done**
   (2026-08-20) — wired on the generate side + characterised (`characterize/leakage.py`,
-  `prng-lattice-lab leaks`), confirming H3. Their RECOVERY stays a disclosed gap (an
-  HNP lattice, not the round-off box); the sweep records that gap for non-TOP_BITS cells.
+  `prng-lattice-lab leaks`), confirming H3. ~~Their RECOVERY stays a disclosed gap.~~
+  **Done (2026-09-09)** — `recover/residue.py` (odd bound) and `recover/starved.py`
+  (bit-length) recover both, complete per model; the sweep scores their grids.
 - Full Randar coordinate inversion (Woodland-region math) — out of scope unless the
   goal changes to a full reproduction.
 - ~~Live-model narrative synthesis in `report/synthesis.py`.~~ **Done** (2026-08-20) —
@@ -146,20 +165,24 @@ candidate-count range. Non-consecutive observations (`call_stride>1`) are now wi
 too, and the MT19937 comparison victim is wired (`mt19937.py`). Noise injection is
 wired too (`LeakProfile.noise`), and the optional live narrative pass is wired
 (`report --narrate`, graceful+disclosed without a key). The odd-bound & bit-length
-leak models are wired on the generate side and characterised (H3 confirmed,
-`prng-lattice-lab leaks`); only their HNP-lattice RECOVERY remains a disclosed gap.
-Nothing in the backlog is now deferred except full Randar coordinate inversion (out
-of scope) and — post-DoD — the repoauditor OPT-036 governance admission.
+leak models are wired on the generate side, characterised (H3 confirmed,
+`prng-lattice-lab leaks`) and RECOVERED (`recover/residue`, `recover/starved`; complete
+solvers, per-trial feasibility disclosed). The repoauditor fold-in landed (PR #129
+detector, PR #130 plugin seam; `weak_rng` runs live). Nothing in the backlog is now
+deferred except full Randar coordinate inversion (out of scope).
 
 ## Commands
 
 ```
 prng-lattice-lab validate                         # Randar vector sanity
-prng-lattice-lab sweep --trials 200               # run the grid, persist run+cells
+prng-lattice-lab sweep --trials 200               # run the grid, persist run+cells (top_bits)
+prng-lattice-lab sweep --model nextint_odd        # residue-leak grid (recover/residue)
+prng-lattice-lab sweep --model bit_length         # starved-leak grid (recover/starved; obs axis 8..64)
 prng-lattice-lab report <run_id> --schema ... --prompt ... --out report.md
 prng-lattice-lab report <run_id> --narrate         # + optional LLM prose (needs key; gap-disclosed without)
 prng-lattice-lab demo 7338710 7668738 5563335     # crack + predict next/prev
 prng-lattice-lab retro --total 20 --offset 10     # reconstruct a whole stream from one 3-token window
+prng-lattice-lab retro --total 30 --offset 12 --bound 255   # same for nextInt(odd) tokens (RandomStringUtils)
 prng-lattice-lab mt-demo --warmup 1000            # MT19937 contrast: clone stdlib random from 624 outputs
 prng-lattice-lab leaks --bits 8                   # characterise the 3 leak models; confirm H3
 pytest -q                                         # correctness gate

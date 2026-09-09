@@ -37,16 +37,31 @@ def _get(cell, key):
     return cell[key] if isinstance(cell, dict) else getattr(cell, key)
 
 
-def _total_bits(cell) -> int:
-    return _get(cell, "bits_per_call") * _get(cell, "num_observations")
+EDGE_HALF_WIDTH = 0.5  # |leaked bits - 48| below this counts as the edge (n*k=48 exactly for top-bits)
+
+
+def _opt(cell, key):
+    if isinstance(cell, dict):
+        return cell.get(key)
+    return getattr(cell, key, None)
+
+
+def _total_bits(cell) -> float:
+    """Information the cell's leak actually carried: the stored realized `leaked_bits`
+    when present (nextint_odd: n*log2 b; bit_length: mean over the run), else the
+    top-bits n*k. Integer-valued for the top-bits grid, so nothing there changes."""
+    lb = _opt(cell, "leaked_bits")
+    if lb is not None:
+        return float(lb)
+    return float(_get(cell, "bits_per_call") * _get(cell, "num_observations"))
 
 
 def regime_of(cell) -> str:
     """Which side of the recoverability edge a cell sits on."""
     nk = _total_bits(cell)
-    if nk < SECRET_BITS:
+    if nk < SECRET_BITS - EDGE_HALF_WIDTH:
         return "underdetermined"
-    if nk == SECRET_BITS:
+    if nk < SECRET_BITS + EDGE_HALF_WIDTH:
         return "edge"
     return "overdetermined"
 
@@ -55,7 +70,7 @@ def predict(cell) -> float:
     """Modelled P(unique recovery) for a cell under the ideal-hash null (see module
     docstring). Deterministic; no peeking at the observed outcome."""
     nk = _total_bits(cell)
-    if nk < SECRET_BITS:
+    if nk < SECRET_BITS - EDGE_HALF_WIDTH:
         return 0.0
     lam = 2.0 ** (SECRET_BITS - nk)   # expected colliding states
     return math.exp(-lam)
@@ -107,7 +122,7 @@ def coverage(cells, *, z: float = _Z95) -> dict:
         rows.append({
             "bits_per_call": _get(c, "bits_per_call"),
             "num_observations": _get(c, "num_observations"),
-            "total_bits": _total_bits(c),
+            "total_bits": round(_total_bits(c), 2),
             "regime": regime,
             "trials": n,
             "observed": observed,
@@ -155,9 +170,9 @@ def reliability_table(cells, bins: tuple[float, ...] = (0.0, 0.2, 0.4, 0.6, 0.8,
 def recovery_by_total_bits(cells) -> list[dict]:
     """Observed unique-recovery rate and mean candidate-set size as a function of
     total leaked bits n*k -- the empirical form of the recoverability edge (H1)."""
-    groups: dict[int, list] = {}
+    groups: dict[float, list] = {}
     for c in _scored(cells):
-        groups.setdefault(_total_bits(c), []).append(c)
+        groups.setdefault(round(_total_bits(c), 1), []).append(c)
     out: list[dict] = []
     for nk in sorted(groups):
         members = groups[nk]

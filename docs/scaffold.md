@@ -80,6 +80,43 @@ config (typed)  ─▶  generate/  ─▶  recover/  ─▶  sweep/  ─▶  sto
   is missed). Backed by fpylll's enumeration. Honours a node budget; raises
   `BudgetExceeded` (never a truncated set) when completeness can't be certified.
 
+### `recover/residue.py`  — complete (nextInt(odd bound), the residue-class leak)
+- The state is split `s = 2^17·X + r`. The low 17 bits `r` run their own LCG mod 2^17
+  (a is odd), so for each of the 2^17 values of `r` (vectorised in numpy, uint64
+  wrap-around arithmetic exact mod 2^48) the carry into the top half is known and the
+  top 31 bits obey `q_t ≡ g^t·X' + E_t(r) (mod 2^31)` with `q_t ∈ [0, ⌊2^31/b⌋)` — the
+  truncated-LCG box problem of `lattice.py` in a 31-bit lattice with the same multiplier
+  vector. `Q = ⌊2^31/b⌋` is exact for ACCEPTED draws (Java's rejection loop).
+- `slice_basis(n, stride)` — LLL of the 31-bit basis (fpylll, cached; the only
+  non-numpy step). `certified_radius(n, b, stride)` — `max_i Σ_j |M_ij|·Q/2`, a
+  worst-case bound on any in-box point's displacement in reduced coordinates,
+  observation-independent. `< 0.5` ⇒ one round-off candidate per slice.
+- `recover_post_states_nextint_odd` — every consistent `s_1` (COMPLETE: all integer
+  vectors within the certified radius are checked; branches where `ρ ≥ 0.5`; raises
+  `RowBudgetExceeded` rather than truncating). Returns the realized round-off margin of
+  the solved slice, the same figure `margin_top_bits` reports.
+- `recover_pre_states_nextint_odd` — steps back and replays Java's real `nextInt`
+  (rejection loop included) as the garbage guard. `rejections_in_window` lets the sweep
+  detect (from ground truth) a rejected draw inside the window — outside the fixed-
+  stride model, excluded and itemised, never counted as a completeness failure.
+- `leaked_bits(b, n) = n·log2 b` — the classification uses realized information.
+
+### `recover/starved.py`  — complete (bit-length of nextInt(2^k), the starved leak)
+- `interval(L, k)` / `info_bits(L, k)` — bit-length `L` pins the state to
+  `[2^(L−1)·w, 2^L·w)`, `w = 2^(48−k)`, worth `k−L+1` bits (`k` for `L = 0`); ~2 bits
+  per call on average, half the observations worth exactly one.
+- `plan_subset` — keeps only observations worth ≥2 bits, most informative first: every
+  lattice dimension multiplies the complete enumeration's ball by ~2^1.05, so a 1-bit
+  observation cannot pay for itself. Stops when the predicted cost is negligible or at
+  `max_dim=40`. Raises `Underdetermined` (<48 realized bits) or `Infeasible` (predicted
+  cost over budget) BEFORE any lattice work — the per-trial feasibility the sweep
+  discloses.
+- `recover_pre_states_bit_length` — irregular-gap lattice over the chosen indices
+  (multiplier `a^gap` + its own affine offset per column), columns scaled by powers of
+  two so the anisotropic box is a cube, `enumerate_box` (COMPLETE), then each candidate
+  is stepped back and replay-filtered against ALL observations — complete for the whole
+  run, not just the subset. Returns the plan and the subset round-off margin.
+
 ### `generate/`  — all three leak models wired
 - `leak.observe(rng, profile)` — all three models produce real measurements:
   TOP_BITS (interval), NEXTINT_ODD (residue class mod odd bound), BIT_LENGTH (starved
@@ -88,14 +125,24 @@ config (typed)  ─▶  generate/  ─▶  recover/  ─▶  sweep/  ─▶  sto
 - `harness.make_trials` — reproducible `(true_pre_call_state, observations)` trials,
   with optional measurement `noise`.
 
-### `sweep/grid.py`  — complete; scores the whole grid
-- `run_cell` routing: the 24×3 anchor → `roundoff` (validated, fpylll-free); a cell
-  with n·k < 48 → `underdetermined` (no unique state, classified analytically, no
-  recovery attempted); n·k ≥ 48 → the general solver, yielding `recovered` (unique)
-  or `ambiguous` (collisions, with a `mean_candidates` range); a non-consecutive or
-  non-TOP_BITS cell, or a missing fpylll → an honest `capability_gap`.
-- `CellResult` now also carries `mean_candidates` and `outcome`. `run_sweep` returns
-  one `CellResult` per grid cell.
+### `sweep/grid.py`  — complete; scores the whole grid, one leak model per run
+- `run_cell` routing, TOP_BITS: the 24×3 anchor → `roundoff` (validated, fpylll-free);
+  n·k < 48 → `underdetermined` (no unique state, classified analytically, no recovery
+  attempted); n·k ≥ 48 → the general solver, yielding `recovered` (unique) or
+  `ambiguous` (collisions, with a `mean_candidates` range); missing fpylll → an honest
+  `capability_gap`.
+- NEXTINT_ODD: `n·log2(bound)` more than half a bit below 48 → `underdetermined`; else
+  `recover/residue` per trial (`method_used = residue_slice`). A trial whose window held
+  a rejected draw is excluded and itemised in `capability_gap`.
+- BIT_LENGTH: feasibility per trial via `recover/starved` — `Underdetermined` /
+  `Infeasible` trials are skipped and itemised; scored trials use
+  `subset_enumerate`. A cell with no scorable trial is `underdetermined` or
+  `infeasible` (a solver limit, disclosed as distinct from the information floor).
+- `CellResult.trials` counts SCORED trials; `model`, `bound`, `leaked_bits` (realized
+  information, mean over scored trials) make each cell self-describing.
+  `CellResult.record()` is the SweepCell record. `run_sweep(cfg)` iterates
+  `cfg.bits_axis × cfg.samples_axis` for `cfg.model`; `config.default_samples_axis`
+  gives BIT_LENGTH its longer observation axis (8…64).
 
 ### `characterize/`  — complete (read projections over stored cells)
 - `margin.margin_surface` / `margin_curve` — the full 2-D margin surface (the old
@@ -156,8 +203,13 @@ Defined in `schema/records.schema.json`: `GeneratorSpec`, `LeakProfile`,
 populated instead of a score when a method is unavailable. `SweepCell.outcome`
 (recovered / ambiguous / underdetermined / gap) and `SweepCell.mean_candidates`
 (mean size of the consistent-state set; the rule-8 uncertainty-as-range field)
-were added in migration `0002`; the store tracks applied migrations in a
-`_migrations` table so append-only `ALTER TABLE`s run exactly once.
+were added in migration `0002`; `SweepCell.model`, `bound` and `leaked_bits`
+(realized information; drives the underdetermined/edge classification and the
+ideal-hash null instead of n·k) in migration `0003`, alongside the `infeasible`
+outcome and the `residue_slice` / `subset_enumerate` methods. `Store.get_run`
+returns the run config (which carries the sweep's leak model). The store tracks
+applied migrations in a `_migrations` table so append-only `ALTER TABLE`s run
+exactly once; rows without a `model` are read as `top_bits`.
 
 ## Invariants enforced by tests
 
@@ -169,6 +221,19 @@ were added in migration `0002`; the store tracks applied migrations in a
 - fpylll reduces `build_basis(3)` to `REDUCED_BASIS_3` up to sign/permutation.
 - Box enumeration is complete (truth always enumerated) and exposes real collisions
   at n·k=48; the node-budget guard raises rather than truncating.
+- `recover/residue`: unique recovery on over-determined odd-bound cells, completeness +
+  collisions at the 48-bit edge, strided and non-canonical (91) bounds, the rejection
+  counter matches Java's loop, garbage → no candidate, row budget raises
+  (`test_residue.py`).
+- `recover/starved`: exact interval/information accounting, feasibility refusals
+  (`Underdetermined` / `Infeasible`), the plan never buys 1-bit observations, complete +
+  unique on the over-determined run, strided recovery (`test_starved.py`).
+- Sweep routes the two models through their solvers with honest outcomes and
+  itemised skips; the store persists `model`/`bound`/`leaked_bits`; calibration
+  classifies on realized bits; the report renders the new methods/outcomes; the
+  odd-bound `retro --bound` demonstration verifies and refuses to guess when ambiguous
+  (`test_sweep.py`, `test_store.py`, `test_characterize.py`, `test_report.py`,
+  `test_retro.py`).
 - Grid classifies cells honestly and the store's migrations are idempotent
   (`test_sweep.py`, `test_store.py`).
 - characterize: the ideal-hash null covers the over/under-determined regions exactly

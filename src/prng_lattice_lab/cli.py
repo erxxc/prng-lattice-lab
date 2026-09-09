@@ -8,6 +8,8 @@ Commands:
   report       render the deterministic report for a stored run
                  (takes --schema and --prompt as inputs)
   demo         one-shot: crack three nextFloat MSBs and show forward/back prediction
+  retro        reconstruct a whole token stream from one captured window (nextFloat
+                 tokens, or nextInt(odd bound) tokens with --bound)
 
 Uses argparse (stdlib) to keep the scaffold dependency-light; swap for typer/click
 if the CLI grows.
@@ -21,7 +23,7 @@ import sys
 from pathlib import Path
 
 from prng_lattice_lab import __version__
-from prng_lattice_lab.config import RecoverMethod, SweepConfig
+from prng_lattice_lab.config import LeakModel, RecoverMethod, SweepConfig, default_samples_axis
 from prng_lattice_lab.recover import roundoff
 from prng_lattice_lab.report import synthesis
 from prng_lattice_lab.store.db import Store
@@ -43,27 +45,24 @@ def cmd_validate(_args) -> int:
 
 
 def cmd_sweep(args) -> int:
-    cfg = SweepConfig(trials_per_cell=args.trials, method=RecoverMethod.AUTO, seed=args.seed)
+    model = LeakModel(args.model)
+    cfg = SweepConfig(trials_per_cell=args.trials, method=RecoverMethod.AUTO, seed=args.seed,
+                      model=model, samples_axis=default_samples_axis(model))
     results = grid.run_sweep(cfg)
     store = Store(args.db)
     run_id = store.record_sweep_run({
-        "config": {"bits_axis": list(cfg.bits_axis), "samples_axis": list(cfg.samples_axis),
+        "config": {"model": model.value, "bits_axis": list(cfg.bits_axis),
+                   "samples_axis": list(cfg.samples_axis),
                    "trials_per_cell": cfg.trials_per_cell, "seed": cfg.seed},
         "lab_version": __version__, "created_at": _now(),
     })
     tally: dict[str, int] = {}
     for c in results:
-        store.record_cell(run_id, {
-            "bits_per_call": c.bits_per_call, "num_observations": c.num_observations,
-            "trials": c.trials, "successes": c.successes, "method_used": c.method_used,
-            "median_ns": c.median_ns, "mean_margin": c.mean_margin,
-            "mean_candidates": c.mean_candidates, "outcome": c.outcome,
-            "capability_gap": c.capability_gap,
-        })
+        store.record_cell(run_id, c.record())
         tally[c.outcome or "?"] = tally.get(c.outcome or "?", 0) + 1
     store.close()
     summary = ", ".join(f"{n} {k}" for k, n in sorted(tally.items()))
-    print(f"run {run_id}: {len(results)} cells ({summary}) -> {args.db}")
+    print(f"run {run_id} [{model.value}]: {len(results)} cells ({summary}) -> {args.db}")
     return 0
 
 
@@ -73,7 +72,9 @@ def cmd_report(args) -> int:
     if not cells:
         print(f"no cells for run {args.run_id}", file=sys.stderr)
         return 1
-    run_meta = {"run_id": args.run_id, "lab_version": __version__, "created_at": _now()}
+    stored = store.get_run(args.run_id) or {}
+    run_meta = {"run_id": args.run_id, "lab_version": __version__, "created_at": _now(),
+                "model": (stored.get("config") or {}).get("model", cells[0].get("model", "top_bits"))}
     md = synthesis.render_markdown(cells, schema_path=args.schema, run_meta=run_meta)
     store.close()
 
@@ -120,13 +121,30 @@ def cmd_retro(args) -> int:
     import random
 
     from prng_lattice_lab.adapt import weak_rng_adapter
-    if args.offset + 3 > args.total or args.offset < 0:
-        print("offset must be >=0 and leave room for a 3-token window (offset+3 <= total)",
-              file=sys.stderr)
+    if args.bound is None:
+        window = 3
+        token = "nextFloat top-24-bit"
+    else:
+        window = args.window or weak_rng_adapter.default_window_nextint_odd(args.bound)
+        token = f"nextInt({args.bound})"
+    if args.offset + window > args.total or args.offset < 0:
+        print(f"offset must be >=0 and leave room for a {window}-token window "
+              f"(offset+{window} <= total)", file=sys.stderr)
         return 2
     state = random.Random(args.seed).getrandbits(48)
-    demo = weak_rng_adapter.demonstrate_retroactive(state, args.total, args.offset)
+    try:
+        if args.bound is None:
+            demo = weak_rng_adapter.demonstrate_retroactive(state, args.total, args.offset)
+        else:
+            demo = weak_rng_adapter.demonstrate_retroactive_nextint_odd(
+                state, args.total, args.offset, args.bound, window)
+    except weak_rng_adapter.AmbiguousRecovery as exc:
+        # rule 8: an ambiguous window is reported as ambiguous, never resolved by a guess
+        print(json.dumps({"token": token, "observations_used": window, "recovered": False,
+                          "ambiguous": True, "consistent_states": exc.candidates}, indent=2))
+        return 1
     print(json.dumps({
+        "token": token,
         "observations_used": demo.observations_used,
         "recovered": demo.recovered_state_present,
         "verified": demo.verified,
@@ -183,7 +201,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("validate", help="run the Randar published test vector")
     sp.set_defaults(func=cmd_validate)
 
-    sp = sub.add_parser("sweep", help="run the (bits x samples) phase-diagram grid")
+    sp = sub.add_parser("sweep", help="run the (bits x samples) phase-diagram grid for one leak model")
+    sp.add_argument("--model", choices=[m.value for m in LeakModel], default=LeakModel.TOP_BITS.value,
+                    help="leak model to sweep: top_bits (nextFloat / pow2 nextInt), nextint_odd "
+                         "(residue class; recover/residue), bit_length (starved; recover/starved, "
+                         "uses a longer observation axis)")
     sp.add_argument("--trials", type=int, default=200)
     sp.add_argument("--seed", type=int, default=0)
     sp.add_argument("--db", default="data/lab.db")
@@ -211,6 +233,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--total", type=int, default=20, help="tokens the generator issues")
     sp.add_argument("--offset", type=int, default=10, help="stream index of the captured window")
     sp.add_argument("--seed", type=int, default=0, help="seed picking the hidden internal state")
+    sp.add_argument("--bound", type=int, default=None,
+                    help="tokens are nextInt(BOUND) with an ODD bound (RandomStringUtils-style) "
+                         "instead of nextFloat; recovery routes through recover/residue")
+    sp.add_argument("--window", type=int, default=None,
+                    help="captured-window size for --bound (default: enough calls for ~56 bits)")
     sp.set_defaults(func=cmd_retro)
 
     sp = sub.add_parser("mt-demo", help="MT19937 comparison: clone Python's random from "

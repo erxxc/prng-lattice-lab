@@ -85,16 +85,20 @@ def render_markdown(cells: list[dict], *, schema_path: str, run_meta: dict) -> s
     beyond fixed captions -- every number here traces to a SweepCell (re-validated
     against `schema_path` on entry, per the report's read-time contract)."""
     _validate_cells(cells, schema_path)
+    model = run_meta.get("model") or _model_of(cells)
     lines: list[str] = []
     lines.append("# Recoverability of java.util.Random under partial-state leakage\n")
     lines.append(f"_Run {run_meta.get('run_id')} · lab v{run_meta.get('lab_version')} "
-                 f"· generated {run_meta.get('created_at')}_\n")
+                 f"· generated {run_meta.get('created_at')} · leak model `{model}`: "
+                 f"{_MODEL_BLURB.get(model, model)}_\n")
 
     lines.append("## Phase diagram: unique-recovery rate by (bits per call × observations)\n")
     lines.append(_phase_table(cells))
-    lines.append("\n_Legend: `x/y` unique recoveries / trials · `*` collisions present "
-                 "(see recoverability edge) · `—` underdetermined (n·k<48, no unique state "
-                 "exists) · `·` capability gap._\n")
+    lines.append("\n_Legend: `x/y` unique recoveries / SCORED trials · `*` collisions present "
+                 "(see recoverability edge) · `—` underdetermined (leaked bits < 48, no unique "
+                 "state exists) · `‡` infeasible within the enumeration budget (disclosed, not "
+                 "attempted) · `·` capability gap. Trials skipped for a disclosed reason are "
+                 "itemised under capability gaps._\n")
 
     lines.append("\n## Round-off margin grid: mean ‖M·e‖∞\n")
     lines.append(_margin_grid(cells))
@@ -116,14 +120,24 @@ def render_markdown(cells: list[dict], *, schema_path: str, run_meta: dict) -> s
     under = sorted({(c["bits_per_call"], c["num_observations"])
                     for c in cells if c.get("outcome") == "underdetermined"})
     if under:
-        lines.append(f"\n## Underdetermined region\n\n{len(under)} cells have n·k < 48 "
-                     "leaked bits < the 48-bit secret, so no unique state exists "
-                     "(≈2^(48−n·k) states share each observation vector). Not a solver "
-                     "limitation — an information-theoretic floor; no recovery attempted.\n")
+        lines.append(f"\n## Underdetermined region\n\n{len(under)} cells leak fewer than 48 "
+                     "bits (n·k for top-bits, n·log2(bound) for nextInt(odd), the realized "
+                     "sum of interval widths for bit-length) — less than the 48-bit secret, so "
+                     "no unique state exists (≈2^(48−leaked) states share each observation "
+                     "vector). Not a solver limitation — an information-theoretic floor; no "
+                     "recovery attempted.\n")
+    infeasible = sorted({(c["bits_per_call"], c["num_observations"])
+                         for c in cells if c.get("outcome") == "infeasible"})
+    if infeasible:
+        lines.append(f"\n## Infeasible within budget\n\n{len(infeasible)} cells carry enough "
+                     "information in principle but their complete enumeration would exceed the "
+                     "budget (each lattice dimension multiplies the enumeration ball by ~2, and "
+                     "a 1-bit observation cannot pay for its own dimension). Disclosed and not "
+                     "attempted — a solver limit, distinct from the information floor.\n")
 
     gaps = [c for c in cells if c.get("capability_gap")]
     if gaps:
-        lines.append("\n## Capability gaps (disclosed, not hidden)\n")
+        lines.append("\n## Capability gaps and skipped trials (disclosed, not hidden)\n")
         for g in sorted({c["capability_gap"] for c in gaps}):
             n = sum(1 for c in gaps if c["capability_gap"] == g)
             lines.append(f"- {n} cells: {g}")
@@ -131,6 +145,27 @@ def render_markdown(cells: list[dict], *, schema_path: str, run_meta: dict) -> s
     lines.append("\n---\n_Deterministic report. Narrative prose (if any) is "
                  "appended separately and attributed to a versioned prompt._\n")
     return "\n".join(lines)
+
+
+_MODEL_BLURB = {
+    "top_bits": "top-k bits per call (nextFloat / power-of-two nextInt); solver = box lattice "
+                "(round-off / complete enumeration)",
+    "nextint_odd": "nextInt(odd bound) residue class, log2(bound) bits per call (the "
+                   "RandomStringUtils idiom); solver = low-17-bit slicing + certified round-off "
+                   "(recover/residue)",
+    "bit_length": "bit-length of nextInt(2^k) only, ~2 bits per call (the Minerva analogue); "
+                  "solver = informative-subset lattice + complete enumeration (recover/starved)",
+}
+
+
+def _model_of(cells: list[dict]) -> str:
+    models = {c.get("model") or "top_bits" for c in cells}
+    return models.pop() if len(models) == 1 else "mixed"
+
+
+def _leaked(c: dict) -> float:
+    lb = c.get("leaked_bits")
+    return float(lb) if lb is not None else float(c["bits_per_call"] * c["num_observations"])
 
 
 def _grid_axes(cells: list[dict]):
@@ -153,6 +188,8 @@ def _phase_table(cells: list[dict]) -> str:
                 vals.append("·")
             elif outcome == "underdetermined":
                 vals.append("—")
+            elif outcome == "infeasible":
+                vals.append("‡")
             else:
                 mark = "*" if outcome == "ambiguous" else ""
                 vals.append(f"{c['successes']}/{c['trials']}{mark}")
@@ -188,10 +225,10 @@ def _edge_table(cells: list[dict]) -> str:
     if not edge:
         return ""
     edge.sort(key=lambda c: (c["bits_per_call"], c["num_observations"]))
-    rows = ["| bits | obs | n·k | unique/trials | mean consistent states |",
+    rows = ["| bits | obs | leaked bits | unique/trials | mean consistent states |",
             "|---|---|---|---|---|"]
     for c in edge:
-        nk = c["bits_per_call"] * c["num_observations"]
+        nk = f"{_leaked(c):g}"
         mc = c.get("mean_candidates")
         mc_s = f"{mc:.2f}" if mc is not None else "·"
         rows.append(f"| {c['bits_per_call']} | {c['num_observations']} | {nk} | "
@@ -238,8 +275,10 @@ def _calibration_section(cells: list[dict]) -> str:
     if not cov["n_cells"]:
         return ""
     out = ["\n## Calibration: ideal-hash prediction vs. observed (exact-oracle coverage)\n"]
-    out.append("The ideal-hash null predicts P(unique recovery)=0 for n·k<48 and "
-               "exp(−2^(48−n·k)) above. Coverage = does that prediction fall inside a 95% "
+    out.append("The ideal-hash null predicts P(unique recovery)=0 below 48 leaked bits and "
+               "exp(−2^(48−leaked)) above (leaked = n·k for top-bits, n·log2 b for nextInt(odd), "
+               "the mean realized leak of scored trials for bit-length — a mean-field "
+               "approximation there). Coverage = does that prediction fall inside a 95% "
                "Wilson interval for the observed rate? This is the closed-form oracle for the "
                "risk-quant coverage machinery.\n")
     regimes = cov["by_regime"]
@@ -251,7 +290,7 @@ def _calibration_section(cells: list[dict]) -> str:
     if misses:
         out.append("The uncovered cells are exactly where the structured LCG departs from an "
                    "ideal hash — the recoverability edge:\n")
-        rows = ["| bits | obs | n·k | predicted | observed | 95% CI |", "|---|---|---|---|---|---|"]
+        rows = ["| bits | obs | leaked bits | predicted | observed | 95% CI |", "|---|---|---|---|---|---|"]
         for c in misses:
             rows.append(f"| {c['bits_per_call']} | {c['num_observations']} | {c['total_bits']} | "
                         f"{c['predicted']:.3f} | {c['observed']:.3f} | "

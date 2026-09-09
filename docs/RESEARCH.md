@@ -31,6 +31,31 @@ common Java token-generation idioms fall on the exploitable side?
   structure than a clean top-bits leak of the same width — exactly the elttam /
   Minerva ends of the family.
 
+- **H5 — The information edge is shape-independent; only the price of reaching it
+  differs. ✔ CONFIRMED (2026-09-09; `sweep --model nextint_odd` / `bit_length`, 200
+  trials/cell, seed 0).** Once each leak shape has a solver that is complete for it,
+  unique recovery is governed by *realized* leaked bits against the 48-bit secret in
+  exactly the way top-bits is:
+    * nextInt(odd) (`recover/residue`): 49 cells, 0 gaps, 0 completeness misses, no
+      rejection-shifted windows. 100% unique wherever n·log2(b) ≥ 60; the four cells at
+      the edge (47.97–48.0 bits: (8,6), (12,4), (16,3), (24,2)) recover uniquely in
+      67/200, 88/200, 83/200, 84/200 trials with 2.19 / 1.92 / 1.81 / 1.84 mean consistent
+      states — the same collision band top-bits shows at n·k = 48. Ideal-hash coverage
+      48/49 (the one miss is an edge cell, as for top-bits). Cost: ~10–35 ms per trial
+      (2^17 vectorised slices), except (4,16) where the certified radius exceeds 0.5
+      (ρ ≈ 1.07) and branching costs ~3 s per trial.
+    * bit-length (`recover/starved`): 42 cells (obs axis 8…64); every SCORED trial
+      recovered uniquely (31 cells at 100%, coverage 31/31). The price is observations:
+      n ≤ 16 is underdetermined throughout (~33 realized bits at n = 16); n = 24 scores
+      only ~6% of trials, n = 32 ~50%, n = 48 ~98%, n = 64 ~99.5% — the rest are
+      disclosed per trial as underdetermined (<48 realized bits) or infeasible (the
+      complete enumeration's cost, ~2^1.05 per lattice dimension, cannot be paid by
+      1-bit observations). k = 2 is the starved extreme: infeasible until n = 48
+      (7/200 scored) and 132/200 at n = 64.
+  So "less usable structure" (H3) does not move the recoverability edge — it moves the
+  cost of reaching it: 2^17 slices per trial for the residue shape, ~2× the observations
+  (and a per-trial feasibility gate) for the starved shape.
+
 ## Method
 1. Model `java.util.Random` exactly (`lcg.py`). ✔ validated.
 2. Recover state via LLL round-off for the over-determined regime
@@ -49,7 +74,14 @@ common Java token-generation idioms fall on the exploitable side?
    (H1), not round-off (H2), is the operative recovery limiter there.
 6. Applied layer: map the recoverable region to real Java idioms
    (session tokens, reset codes, CSRF/nonces) and, for the clean case, demonstrate
-   next/prev token prediction (`adapt/weak_rng_adapter`). ✔ demonstration path.
+   next/prev token prediction (`adapt/weak_rng_adapter`). ✔ demonstration path; the
+   RandomStringUtils idiom too (`retro --bound 255`: an 8-token nextInt(255) window
+   reconstructs the whole stream, verified; an ambiguous window is refused, not guessed).
+7. Recover the other two leak shapes with solvers complete for them
+   (`recover/residue.py`: low-17-bit slicing + certified round-off; `recover/starved.py`:
+   informative-subset lattice + complete enumeration + replay filter), sweep each
+   model's grid, classify on realized leaked bits (`SweepCell.leaked_bits`). ✔ done;
+   H5 above.
 
 ## Report skeleton
 Abstract → threat model (structured generator + partial view across a trust
@@ -66,9 +98,12 @@ appendix (run id, seed, trial count, lab + prompt versions).
 - ~~`nextint_odd` and `bit_length` leak models (elttam / Minerva ends of the family).~~
   **Done 2026-08-20** — both wired on the GENERATE side (`generate/leak.py`) and
   characterised (`characterize/leakage.py`, `prng-lattice-lab leaks`), confirming H3
-  (see hypotheses). Their RECOVERY stays a disclosed capability gap: a residue class
-  (odd bound) / starved interval (bit-length) needs an HNP lattice, not this lab's
-  round-off box-CVP. The sweep records that gap explicitly for non-TOP_BITS cells.
+  (see hypotheses). ~~Their RECOVERY stays a disclosed capability gap.~~ **Done
+  2026-09-09** — `recover/residue.py` + `recover/starved.py`; both complete for their
+  model; `sweep --model` scores each grid (H5). Remaining known limits, disclosed per
+  trial rather than hidden: a rejected nextInt draw inside an odd-bound window (rate
+  ≤ 2^-16 for bounds 2^k − 1; excluded and itemised), and bit-length trials whose
+  complete enumeration is infeasible within budget (k = 2 below n = 48).
 - ~~Non-consecutive observations (`call_stride>1`): compose `a` with itself per step.~~
   **Done 2026-08-19** (`recover.lattice.strided_lcg`; the whole recover path takes a
   `call_stride`, keying the reduced basis on (n, stride) and using a^stride as the
@@ -105,6 +140,10 @@ appendix (run id, seed, trial count, lab + prompt versions).
 ## Fold-in transfer targets (into current projects)
 - **repoauditor:** `weak_rng_adapter` as a deterministic detect-stage adapter whose
   live recovery demonstration is a corroborating source for severity licensing.
+  **Landed** (PR #129 detector, PR #130 plugin-manifest seam; 2026-09-09). All three
+  detector idioms now have a lab-side demonstration path (top-bits: `demo`/`retro`;
+  RandomStringUtils: `retro --bound`). Next: carry the `RecoveryDemonstration` into
+  the finding's rationale/artifact so adjudicate can license the upgrade.
 - **risk-quant calibration:** the margin curve is a closed-form-checkable oracle to
   validate prediction-interval coverage (session G) before applying it to noisy data.
 - **methodology note:** exact-vs-noisy leakage as the crisp instance of the

@@ -13,13 +13,16 @@ demonstrate predictable-token weaknesses in code under review.
 ## Quick start
 ```bash
 pip install -e .
-pytest -q                                       # correctness gate (8 tests)
+pytest -q                                       # correctness gate
 prng-lattice-lab validate                       # Randar published vector
 prng-lattice-lab demo 7338710 7668738 5563335   # crack + predict next/prev tokens
 prng-lattice-lab retro --total 20 --offset 10   # reconstruct a whole token stream from one captured window
+prng-lattice-lab retro --total 30 --offset 12 --bound 255   # same for nextInt(odd) tokens (RandomStringUtils idiom)
 prng-lattice-lab mt-demo --warmup 1000          # MT19937 contrast: clone Python's random from 624 outputs
 prng-lattice-lab leaks --bits 8                 # characterise the 3 leak models, confirm H3
-prng-lattice-lab sweep --trials 200             # run the phase-diagram grid
+prng-lattice-lab sweep --trials 200             # run the phase-diagram grid (top-bits leak)
+prng-lattice-lab sweep --model nextint_odd      # ... for the nextInt(odd) residue leak
+prng-lattice-lab sweep --model bit_length       # ... for the starved bit-length leak (longer obs axis)
 prng-lattice-lab report 1 --out report.md       # deterministic report from stored run
 prng-lattice-lab report 1 --narrate             # + optional LLM prose (needs key; skip disclosed without)
 ```
@@ -35,10 +38,10 @@ prng-lattice-lab report 1 --narrate             # + optional LLM prose (needs ke
 | retroactive token-stream reconstruction | ✔ verified (`retro`) |
 | MT19937 comparison victim (exact untempering) | ✔ validated vs stdlib (`mt-demo`) |
 | repoauditor `weak_rng_adapter` demonstration path | ✔ reuses validated cracker |
-| repoauditor `detect_in_source` (OPT-036) | ◑ built inside repoauditor, pending merge |
+| repoauditor `detect_in_source` (OPT-036) | ✔ merged (PR #129 detector, PR #130 plugin seam); `weak_rng` runs live in repoauditor |
 | measurement-noise injection (third phase axis) | ✔ wired (`LeakProfile.noise`) |
 | optional LLM narrative pass (`report --narrate`) | ✔ wired — key-gated, skip disclosed |
-| odd-bound / bit-length leak models | ✔ generated + characterised (H3, `leaks`); recovery = disclosed HNP gap |
+| odd-bound / bit-length leak models | ✔ generated + characterised (H3, `leaks`) **and recovered**: `recover/residue` (nextInt(odd), low-bit slicing, complete) · `recover/starved` (bit-length, subset lattice, complete); `sweep --model` draws each phase diagram |
 
 Install the general solver with `pip install -e '.[lattice]'` (brings in
 `fpylll` + `cysignals`). Without it the round-off anchor still scores and the

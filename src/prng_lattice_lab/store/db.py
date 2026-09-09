@@ -82,22 +82,38 @@ class Store:
         self.conn.execute(
             "INSERT INTO sweep_cell(run_id, bits_per_call, num_observations, trials, "
             "successes, method_used, median_ns, mean_margin, mean_candidates, outcome, "
-            "capability_gap) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            "capability_gap, model, bound, leaked_bits) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (run_id, cell["bits_per_call"], cell["num_observations"], cell["trials"],
              cell["successes"], cell["method_used"], cell.get("median_ns"),
              cell.get("mean_margin"), cell.get("mean_candidates"), cell.get("outcome"),
-             cell.get("capability_gap")),
+             cell.get("capability_gap"), cell.get("model", "top_bits"), cell.get("bound"),
+             cell.get("leaked_bits")),
         )
         self.conn.commit()
 
     def list_cells(self, run_id: int) -> list[dict]:
         cur = self.conn.execute(
             "SELECT bits_per_call, num_observations, trials, successes, method_used, "
-            "median_ns, mean_margin, mean_candidates, outcome, capability_gap "
+            "median_ns, mean_margin, mean_candidates, outcome, capability_gap, "
+            "model, bound, leaked_bits "
             "FROM sweep_cell WHERE run_id=? "
             "ORDER BY bits_per_call, num_observations", (run_id,))
         cols = [d[0] for d in cur.description]
-        return [dict(zip(cols, row)) for row in cur.fetchall()]
+        rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+        for r in rows:                       # pre-0.2 rows observed the top-bits leak
+            if r.get("model") is None:
+                r["model"] = "top_bits"
+        return rows
+
+    def get_run(self, run_id: int) -> dict | None:
+        """The stored SweepRun record (config decoded), or None if unknown."""
+        cur = self.conn.execute(
+            "SELECT config_json, lab_version, created_at FROM sweep_run WHERE id=?", (run_id,))
+        row = cur.fetchone()
+        if row is None:
+            return None
+        return {"run_id": run_id, "config": json.loads(row[0]), "lab_version": row[1],
+                "created_at": row[2]}
 
     def close(self) -> None:
         self.conn.close()

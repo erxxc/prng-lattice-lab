@@ -24,9 +24,11 @@ top-bits yet 0 box-usable bits (wrong shape), and bit-length carries interval bi
 far fewer of them. Both leak LESS USABLE STRUCTURE than a clean top-bits leak -- two
 distinct ways, which is exactly H3.
 
-This is a GENERATE-side characterisation. It does not claim to RECOVER state from the
-odd-bound / bit-length leaks (that needs an HNP lattice, a disclosed capability gap in
-the sweep); it measures how much usable structure each leak carries in the first place.
+This is a GENERATE-side characterisation of the leak SHAPE: "box-usable" means
+consumable by the round-off box lattice as-is. Recovery from the other two shapes is
+done by their own solvers (recover/residue for the residue class, recover/starved for
+the starved interval); their cost -- 2**17 slices per trial, or ~2x the observations --
+is the price H3 predicted for the missing usable structure.
 """
 from __future__ import annotations
 
@@ -47,7 +49,7 @@ _STRUCTURE = {
 }
 _BOX_USABLE = {                       # is the constraint consumable by the round-off box-CVP?
     LeakModel.TOP_BITS: True,
-    LeakModel.NEXTINT_ODD: False,     # residue class -> HNP, not this lab's round-off lattice
+    LeakModel.NEXTINT_ODD: False,     # residue class -> recover/residue (slicing), not the box
     LeakModel.BIT_LENGTH: True,       # interval-shaped, but starved of bits
 }
 

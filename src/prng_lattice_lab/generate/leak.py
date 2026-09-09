@@ -14,11 +14,13 @@ Three models, faithful to real Java idioms:
                   interval, but a starved one: ~2 bits per observation regardless of
                   bound, so many observations are needed.
 
-All three are wired on the GENERATE side (observe() produces real measurements) and
+All three are wired on the GENERATE side (observe() produces real measurements),
 characterised for how much usable structure each carries (characterize/leakage.py --
-this is where H3 is confirmed on our own data). RECOVERY beyond TOP_BITS (an HNP
-lattice for the residue/starved constraints) is a disclosed capability gap in the
-sweep, not faked.
+this is where H3 is confirmed on our own data), and RECOVERED: TOP_BITS by the box
+lattice (recover/lattice), NEXTINT_ODD by low-bit slicing + certified round-off
+(recover/residue), BIT_LENGTH by an informative-subset lattice + complete enumeration
+(recover/starved). Each solver is complete for its model; infeasible or
+underdetermined trials are disclosed per trial in the sweep, never faked.
 """
 from __future__ import annotations
 

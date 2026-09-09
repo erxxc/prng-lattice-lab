@@ -101,3 +101,22 @@ def test_narrative_with_key_calls_model_and_attributes(monkeypatch):
     assert "DETERMINISTIC REPORT" in captured["messages"][0]["content"]
     assert captured["model"] == "claude-x"
     assert captured["api_key"] == "sk-test"
+
+
+def test_new_solver_methods_and_infeasible_outcome_render():
+    cells = [
+        {"bits_per_call": 8, "num_observations": 8, "trials": 10, "successes": 10,
+         "method_used": "residue_slice", "median_ns": 1.0, "mean_margin": 0.1,
+         "mean_candidates": 1.0, "outcome": "recovered", "capability_gap": None,
+         "model": "nextint_odd", "bound": 255, "leaked_bits": 63.95},
+        {"bits_per_call": 2, "num_observations": 32, "trials": 0, "successes": 0,
+         "method_used": "none", "median_ns": None, "mean_margin": None,
+         "mean_candidates": None, "outcome": "infeasible",
+         "capability_gap": "skipped 10/10 trials: 10 infeasible (enumeration cost over budget)",
+         "model": "bit_length", "bound": 4, "leaked_bits": 49.0},
+    ]
+    md = synthesis.render_markdown(cells, schema_path=SCHEMA,
+                                   run_meta={**_META, "model": "nextint_odd"})
+    assert "leak model `nextint_odd`" in md
+    assert "‡" in md and "Infeasible within budget" in md
+    assert "skipped 10/10 trials" in md

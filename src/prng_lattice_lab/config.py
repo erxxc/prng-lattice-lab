@@ -21,8 +21,10 @@ class LeakModel(str, Enum):
 
 class RecoverMethod(str, Enum):
     ROUNDOFF = "roundoff"          # Babai round-off (fast, needs generous over-determination)
-    ENUMERATE = "enumerate"        # branch-and-bound over the reduced lattice (starved leak)
-    AUTO = "auto"                  # pick per-cell based on predicted margin
+    ENUMERATE = "enumerate"        # complete box enumeration over the reduced lattice
+    RESIDUE_SLICE = "residue_slice"        # nextInt(odd): low-bit slicing + certified round-off
+    SUBSET_ENUMERATE = "subset_enumerate"  # bit-length: informative-subset lattice + enumeration
+    AUTO = "auto"                  # pick per-cell based on the leak model / predicted margin
 
 
 @dataclass(frozen=True)
@@ -68,12 +70,25 @@ class LeakProfile:
         return self.total_leaked_bits() >= secret_bits
 
 
+DEFAULT_BITS_AXIS: tuple[int, ...] = (2, 4, 8, 12, 16, 20, 24)
+DEFAULT_SAMPLES_AXIS: tuple[int, ...] = (2, 3, 4, 6, 8, 12, 16)
+# The bit-length leak is starved (~2 bits/call regardless of width), so its grid needs
+# far more observations to reach the 48-bit edge; n<=16 is underdetermined throughout.
+BIT_LENGTH_SAMPLES_AXIS: tuple[int, ...] = (8, 16, 24, 32, 48, 64)
+
+
+def default_samples_axis(model: LeakModel) -> tuple[int, ...]:
+    """Observation-count axis appropriate to a leak model's information rate."""
+    return BIT_LENGTH_SAMPLES_AXIS if model is LeakModel.BIT_LENGTH else DEFAULT_SAMPLES_AXIS
+
+
 @dataclass(frozen=True)
 class SweepConfig:
-    """The full grid to characterise."""
-    bits_axis: tuple[int, ...] = (2, 4, 8, 12, 16, 20, 24)
-    samples_axis: tuple[int, ...] = (2, 3, 4, 6, 8, 12, 16)
+    """The full grid to characterise (one leak model per run)."""
+    bits_axis: tuple[int, ...] = DEFAULT_BITS_AXIS
+    samples_axis: tuple[int, ...] = DEFAULT_SAMPLES_AXIS
     trials_per_cell: int = 200
     method: RecoverMethod = RecoverMethod.AUTO
     seed: int = 0                        # RNG seed for reproducible ground-truth draws
     generator: GeneratorSpec = field(default_factory=GeneratorSpec)
+    model: LeakModel = LeakModel.TOP_BITS   # which leak the grid observes

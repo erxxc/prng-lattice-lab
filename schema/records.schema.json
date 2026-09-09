@@ -40,11 +40,14 @@
         "num_observations": {"type": "integer"},
         "trials": {"type": "integer", "minimum": 0},
         "successes": {"type": "integer", "minimum": 0, "description": "trials with a UNIQUE, correct recovery (unique_candidate == ground truth)"},
-        "method_used": {"enum": ["roundoff", "enumerate", "none"]},
+        "method_used": {"enum": ["roundoff", "enumerate", "residue_slice", "subset_enumerate", "none"], "description": "roundoff/enumerate = the top-bits box lattice; residue_slice = nextInt(odd) low-17-bit slicing + certified round-off (recover/residue.py); subset_enumerate = bit-length informative-subset lattice + complete enumeration (recover/starved.py); none = not attempted"},
+        "model": {"enum": ["top_bits", "nextint_odd", "bit_length"], "default": "top_bits", "description": "leak model the cell observed; absent/null on pre-0.2 rows means top_bits"},
+        "bound": {"type": ["integer", "null"], "description": "nextInt bound for nextint_odd / bit_length cells; null for top_bits"},
+        "leaked_bits": {"type": ["number", "null"], "description": "mean information actually leaked per trial: n*k for top_bits, n*log2(bound) for nextint_odd, mean sum(k-L+1) over the bit-length run. Drives the underdetermined/edge classification and the ideal-hash null instead of n*k."},
         "median_ns": {"type": ["number", "null"]},
         "mean_margin": {"type": ["number", "null"], "description": "mean ||M.e||_inf; <0.5 => round-off safe"},
         "mean_candidates": {"type": ["number", "null"], "description": "mean size of the box-consistent state set across scored trials; 1.0 = clean unique recovery, >1 = collisions (recoverability edge). The rule-8 uncertainty-as-range field."},
-        "outcome": {"enum": ["recovered", "ambiguous", "underdetermined", "gap", null], "description": "recovered = every scored trial uniquely resolved; ambiguous = collisions present (see mean_candidates); underdetermined = n*k<48, no unique state exists (information-theoretic, not a tooling limit); gap = required method not wired (see capability_gap)"},
+        "outcome": {"enum": ["recovered", "ambiguous", "underdetermined", "infeasible", "gap", null], "description": "recovered = every scored trial uniquely resolved; ambiguous = collisions present (see mean_candidates); underdetermined = leaked_bits more than half a bit below 48, so no unique state exists (information-theoretic, not a tooling limit); infeasible = the method exists but the trials' certified/complete enumeration cost exceeds the budget, so nothing was attempted (a disclosed solver limit, not a guess); gap = required method not wired (see capability_gap). `trials` counts SCORED trials only. Trials skipped for a disclosed per-trial reason (rejection-shifted window, infeasible enumeration budget, per-trial underdetermination) are itemised in capability_gap."},
         "capability_gap": {"type": ["string", "null"], "description": "populated INSTEAD of a score when a required method is unavailable; never leave a gap silent"}
       }
     },

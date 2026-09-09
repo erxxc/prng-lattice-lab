@@ -133,3 +133,20 @@ def test_characterize_composes_over_a_real_sweep():
     assert by_nk[24]["mean_unique_recovery"] == 0.0          # underdetermined
     assert by_nk[72]["mean_unique_recovery"] == 1.0          # over-determined
     assert 0.0 < by_nk[48]["mean_unique_recovery"] < 1.0     # the ambiguous edge
+
+
+def test_realized_leaked_bits_override_n_times_k():
+    # nextInt(255) x 6 leaks 47.96 bits: the EDGE (not underdetermined), and the null
+    # predicts exp(-2^0.04); bit-length cells carry a realized mean instead of n*k.
+    c = _cell(8, 6, 100, 37, mean_candidates=1.8, outcome="ambiguous")
+    c["leaked_bits"] = 6 * math.log2(255)
+    assert cal.regime_of(c) == "edge"
+    assert cal.predict(c) == pytest.approx(math.exp(-(2 ** (48 - c["leaked_bits"]))))
+    b = _cell(8, 16, 100, 0, outcome="underdetermined")
+    b["leaked_bits"] = 32.7
+    assert cal.regime_of(b) == "underdetermined" and cal.predict(b) == 0.0
+    o = _cell(8, 48, 100, 100)
+    o["leaked_bits"] = 96.2
+    assert cal.regime_of(o) == "overdetermined"
+    rows = cal.recovery_by_total_bits([c, b, o])
+    assert [r["total_bits"] for r in rows] == [32.7, 48.0, 96.2]

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "prng-lattice-lab"
-version = "0.1.0"
+version = "0.2.0"
 description = "A closed harness for characterising the recoverability boundary of java.util.Random under partial-state leakage. Anchored on Randar; folds into repoauditor as a weak_rng_adapter."
 requires-python = ">=3.11"
 dependencies = [

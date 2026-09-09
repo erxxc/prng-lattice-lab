@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import random
 
+import pytest
+
 from prng_lattice_lab.adapt import weak_rng_adapter as wra
 from prng_lattice_lab.cli import main
 from prng_lattice_lab.lcg import JavaRandom
@@ -50,3 +52,19 @@ def test_retroactive_tokens_match_ground_truth():
 def test_cli_retro_verifies_and_exits_zero():
     assert main(["retro", "--total", "20", "--offset", "10", "--seed", "7"]) == 0
     assert main(["retro", "--total", "5", "--offset", "4", "--seed", "1"]) == 2  # no room for window
+
+
+def test_retro_nextint_odd_reconstructs_stream_and_cli_verifies():
+    pytest.importorskip("fpylll")
+    state = random.Random(21).getrandbits(48)
+    demo = wra.demonstrate_retroactive_nextint_odd(state, total_tokens=30, window_offset=12, bound=255)
+    assert demo.recovered_state_present and demo.verified
+    assert demo.observations_used == wra.default_window_nextint_odd(255) == 8   # ceil(56/7.99)
+    assert len(demo.predicted_prev) == 12
+    assert main(["retro", "--total", "30", "--offset", "12", "--seed", "21", "--bound", "255"]) == 0
+    # a window too short to disambiguate is reported as ambiguous, never guessed
+    with pytest.raises(wra.AmbiguousRecovery):
+        for seed in range(40):
+            wra.demonstrate_retroactive_nextint_odd(random.Random(seed).getrandbits(48),
+                                                    total_tokens=20, window_offset=0,
+                                                    bound=(1 << 24) - 1, window_size=2)

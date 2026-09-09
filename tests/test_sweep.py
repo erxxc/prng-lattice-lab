@@ -48,6 +48,53 @@ def test_strided_cell_recovers_through_the_general_solver():
     assert cell.capability_gap is None
 
 
+def test_nextint_odd_cells_route_through_residue_solver():
+    # over-determined: unique; the 48-bit edge: complete + ambiguous; below: underdetermined
+    over = run_cell(LeakProfile(model=LeakModel.NEXTINT_ODD, bits_per_call=8, num_observations=8),
+                    15, RecoverMethod.AUTO, seed=0)
+    assert over.outcome == "recovered" and over.successes == over.trials == 15
+    assert over.method_used == "residue_slice" and over.model == "nextint_odd" and over.bound == 255
+    assert over.leaked_bits == pytest.approx(8 * 7.994, abs=0.01)
+    assert "WARNING" not in (over.capability_gap or "")
+
+    edge = run_cell(LeakProfile(model=LeakModel.NEXTINT_ODD, bits_per_call=8, num_observations=6),
+                    25, RecoverMethod.AUTO, seed=0)
+    assert edge.outcome == "ambiguous" and (edge.mean_candidates or 0) > 1
+    assert "WARNING" not in (edge.capability_gap or "")
+
+    under = run_cell(LeakProfile(model=LeakModel.NEXTINT_ODD, bits_per_call=4, num_observations=12),
+                     5, RecoverMethod.AUTO, seed=0)
+    assert under.outcome == "underdetermined" and under.method_used == "none"
+    assert under.leaked_bits < 47.5
+
+
+def test_bit_length_cells_disclose_per_trial_feasibility():
+    short = run_cell(LeakProfile(model=LeakModel.BIT_LENGTH, bits_per_call=8, num_observations=16),
+                     6, RecoverMethod.AUTO, seed=0)
+    assert short.outcome == "underdetermined" and short.trials == 0
+    assert "skipped 6/6" in (short.capability_gap or "")
+
+    long = run_cell(LeakProfile(model=LeakModel.BIT_LENGTH, bits_per_call=8, num_observations=48),
+                    8, RecoverMethod.AUTO, seed=0)
+    assert long.outcome == "recovered" and long.successes == long.trials == 8
+    assert long.method_used == "subset_enumerate" and long.model == "bit_length" and long.bound == 256
+    assert long.leaked_bits > 48 and "WARNING" not in (long.capability_gap or "")
+
+    # k=2: every informative observation is worth 2 bits, which cannot pay for its
+    # own lattice dimension within budget -> disclosed as infeasible, not faked.
+    starved = run_cell(LeakProfile(model=LeakModel.BIT_LENGTH, bits_per_call=2, num_observations=32),
+                       6, RecoverMethod.AUTO, seed=0)
+    assert starved.outcome in ("infeasible", "underdetermined") and starved.trials == 0
+    assert "skipped" in (starved.capability_gap or "")
+
+
+def test_run_sweep_honours_the_model():
+    cells = run_sweep(SweepConfig(trials_per_cell=3, model=LeakModel.NEXTINT_ODD,
+                                  bits_axis=(8, 16), samples_axis=(3, 8)))
+    assert {c.model for c in cells} == {"nextint_odd"}
+    assert all(c.outcome != "gap" for c in cells)
+
+
 def test_noisy_edge_cell_degrades_to_ambiguous():
     # Measurement noise widens the box; an n*k=48 edge cell degrades from (partly)
     # unique to ambiguous, and the enumeration stays complete (no completeness WARNING).

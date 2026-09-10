@@ -235,9 +235,11 @@
             "msb24",
             "nextint_odd",
             "seeded",
-            "mt19937"
+            "mt19937",
+            "mt19937_truncated",
+            "randomstringutils"
           ],
-          "description": "msb24 = nextFloat top-24-bit tokens (Randar path); nextint_odd = nextInt(odd bound) tokens (RandomStringUtils idiom, recover/residue); seeded = recover the new Random(seed) constructor seed from outputs (often a wall-clock creation time); mt19937 = full 32-bit outputs of Python's random (exact untempering)"
+          "description": "msb24 = nextFloat top-24-bit tokens (Randar path); nextint_odd = nextInt(odd bound) tokens (RandomStringUtils idiom, recover/residue); seeded = recover the new Random(seed) constructor seed from outputs (often a wall-clock creation time); mt19937 = full 32-bit outputs of Python's random (exact untempering) ; mt19937_truncated = MT19937 state recovered from TRUNCATED Python outputs (random()/getrandbits(k)) by GF(2) linear solve (recover/mt19937_gf2) ; randomstringutils = recover java.util.Random state through Apache Commons RandomStringUtils-style character-filter REJECTIONS (unknown-gap wrapper over recover/residue; recover/gaps)"
         },
         "victim": {
           "type": "string",
@@ -286,9 +288,10 @@
         "oracle": {
           "enum": [
             "jvm",
+            "python",
             "lab_model"
           ],
-          "description": "generator that produced the observed tokens: jvm = a real OpenJDK java.util.Random process (adapt.jvm_oracle), lab_model = the lab's port. A jvm artifact is evidence the model matches the real generator beyond the pinned vector."
+          "description": "generator that produced the observed tokens: jvm = a real OpenJDK java.util.Random process (adapt.jvm_oracle); python = real CPython random.Random (the MT19937 victim itself); lab_model = the lab's port. A jvm/python artifact is evidence recovery works on the real generator, not a reimplementation."
         },
         "oracle_detail": {
           "type": [

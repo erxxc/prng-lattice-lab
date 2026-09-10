@@ -57,13 +57,26 @@ from prng_lattice_lab.adapt import weak_rng_adapter as wra
 from prng_lattice_lab.adapt.contract import Citation, RecoveryDemonstration
 from prng_lattice_lab.lcg import JavaRandom, step_back
 
-KINDS = ("msb24", "nextint_odd", "seeded", "mt19937")
+KINDS = ("msb24", "nextint_odd", "seeded", "mt19937", "mt19937_truncated", "randomstringutils")
 MULT = jvm_oracle.MULT
 
 _MT_CITE = Citation(
     source="Matsumoto & Nishimura (1998); tempering inversion",
     locator="https://en.wikipedia.org/wiki/Mersenne_Twister#Algorithmic_detail",
     note="MT19937 outputs untemper exactly; 624 consecutive words reconstruct the state.",
+)
+_ELTTAM_CITE = wra._ELTTAM_CITE
+_RSU_CITE = Citation(
+    source="Apache Commons Lang, RandomStringUtils",
+    locator="https://commons.apache.org/proper/commons-lang/apidocs/org/apache/commons/lang3/RandomStringUtils.html",
+    note="Default RandomStringUtils draws from java.util.Random and redraws on a character-class "
+         "filter miss; the kept characters sit at unknown gaps (modelled by recover/gaps).",
+)
+_GF2_CITE = Citation(
+    source="Argyros & Kiayias, 'I Forgot Your Password' (USENIX Security 2012)",
+    locator="https://www.usenix.org/conference/usenixsecurity12/technical-sessions/presentation/argyros",
+    note="MT19937 twist + temper are GF(2)-linear; truncated outputs give linear equations "
+         "solvable for the full state.",
 )
 
 CLAIM_BOUNDARY = (
@@ -162,7 +175,9 @@ def _issue_nextint(state: int, n: int, bound: int, used: str) -> list[int]:
 
 def demonstrate(kind: str, *, seed: int = 0, total: int = 20, offset: int = 10,
                 bound: int = 255, window: int | None = None, warmup: int = 1000,
-                predict: int = 5, oracle: str = "auto") -> DemonstrationArtifact:
+                predict: int = 5, oracle: str = "auto", mt_source: str = "random",
+                mt_bits: int = 32, mt_calls: int | None = None,
+                rsu_bound: int = 255, rsu_accept: int = 200) -> DemonstrationArtifact:
     """Build one demonstration artifact of the given kind (see module doc).
 
     `oracle`: "auto" uses a real JVM for the java.util.Random kinds when a JDK is
@@ -178,6 +193,10 @@ def demonstrate(kind: str, *, seed: int = 0, total: int = 20, offset: int = 10,
         return _demo_seeded(seed, total, oracle)
     if kind == "mt19937":
         return _demo_mt19937(seed, warmup, predict)
+    if kind == "mt19937_truncated":
+        return _demo_mt19937_truncated(seed, mt_source, mt_bits, mt_calls, predict)
+    if kind == "randomstringutils":
+        return _demo_randomstringutils(seed, rsu_bound, rsu_accept, total, predict, oracle)
     raise ValueError(f"unknown demonstration kind {kind!r}; expected one of {KINDS}")
 
 
@@ -306,13 +325,116 @@ def _demo_mt19937(seed: int, warmup: int, predict: int) -> DemonstrationArtifact
                        held_out_checked=held_out, coincidence_bound=cbound,
                        coincidence_bound_log2=clog2)
     return _finish(
-        kind="mt19937", victim="python random.Random (MT19937)", used="lab_model", detail=None,
+        kind="mt19937", victim="python random.Random (MT19937)", used="python",
+        detail="CPython random.Random (Mersenne Twister)",
         idiom_ids=["py-random-getrandbits", "py-random-module"],
         parameters={"seed": seed, "warmup": warmup, "predict": predict,
                     "observation": "624 consecutive full 32-bit outputs (getrandbits(32))"},
         reproduce=f"prng-lattice-lab demonstrate mt19937 --seed {seed} --warmup {warmup} "
                   f"--predict {predict}",
         demo=demo, cert=cert, citations=[_MT_CITE])
+
+
+def _demo_randomstringutils(seed: int, bound: int, accept_count: int, total: int,
+                            predict: int, oracle: str) -> DemonstrationArtifact:
+    """Recover java.util.Random state through RandomStringUtils-style character-filter
+    rejections (recover/gaps over recover/residue). The victim draws nextInt(bound) and
+    keeps a value only when it maps to an in-class character (modelled as value <
+    accept_count); the attacker sees the kept values at unknown gaps."""
+    import math
+    from prng_lattice_lab.recover.gaps import recover_unknown_gaps, ResidueGapSolver
+    used, detail = _resolve_oracle(oracle)                 # java kinds: jvm or lab_model
+    accept = lambda v: v < accept_count
+    solver = ResidueGapSolver(bound, accept)
+    state = random.Random(seed).getrandbits(48)
+    n_obs = total
+    need = int((n_obs + predict) / (accept_count / bound)) + 64   # raw draws to yield enough kept
+    if used == "jvm":
+        raw = jvm_oracle.emit(state, "nextint", need, bound)
+    else:
+        gen = JavaRandom.from_internal_state(state)
+        raw = [gen.next_int(bound) for _ in range(need)]
+    kept = [v for v in raw if accept(v)]
+    observed = kept[:n_obs]
+    rec = recover_unknown_gaps(observed, solver, anchor=8, max_gap=4, max_rejects=8, budget=4000)
+    if rec.unique:
+        full = solver.replay(rec.states[0], n_obs + predict)   # predict further kept values
+        verified = full == kept[:n_obs + predict]
+        predicted = full[n_obs:] if full else []
+    else:
+        verified = False
+        predicted = []
+    demo = RecoveryDemonstration(
+        observations_used=n_obs, recovered_state_present=rec.unique,
+        predicted_prev=[], predicted_next=predicted, verified=bool(verified))
+    held = predict if verified else 0
+    cbound, clog2 = _coincidence(math.log2(accept_count), held)
+    rejects = (sum(rec.gap_pattern) - (min(8, n_obs) - 1)) if rec.gap_pattern else None
+    cert = Certificate(
+        method="residue_gap", candidates=len(rec.states),
+        unique=rec.unique, held_out_checked=held,
+        coincidence_bound=cbound, coincidence_bound_log2=clog2)
+    params = {"bound": bound, "accept_count": accept_count,
+              "reject_fraction": round(1 - accept_count / bound, 4),
+              "total": total, "predict": predict, "seed": seed,
+              "anchor_rejections_solved": rejects, "gap_pattern": list(rec.gap_pattern) if rec.gap_pattern else None,
+              "patterns_tried": rec.patterns_tried, "budget_exhausted": rec.budget_exhausted}
+    return _finish(
+        kind="randomstringutils", victim="java.util.Random via Apache Commons RandomStringUtils",
+        used=used, detail=detail, idiom_ids=["apache-randomstringutils"], parameters=params,
+        reproduce=f"prng-lattice-lab demonstrate randomstringutils --seed {seed} "
+                  f"--rsu-bound {bound} --rsu-accept {accept_count} --total {total} --oracle {used}",
+        demo=demo, cert=cert, citations=[_ELTTAM_CITE, _RSU_CITE, wra._RANDAR_CITE])
+
+
+def _demo_mt19937_truncated(seed: int, source: str, bits: int, calls: int | None,
+                           predict: int) -> DemonstrationArtifact:
+    """Recover MT19937 STATE from truncated CPython outputs (random() or getrandbits(k))
+    via GF(2) (recover/mt19937_gf2), then predict and verify. The victim is real CPython
+    random, so oracle == "python"."""
+    from prng_lattice_lab.recover import mt19937_gf2 as G
+    victim = random.Random(seed)
+    if source == "random":
+        calls = calls or G.calls_for_full_rank_random()
+        obs = [victim.random() for _ in range(calls)]
+        rec = G.recover_from_random(obs)
+        words, certain = rec.predict_next_words(2 * predict)
+        pred = [((words[2 * k] >> 5) * (1 << 26) + (words[2 * k + 1] >> 6)) for k in range(predict)]
+        actual = [int(victim.random() * (1 << 53)) for _ in range(predict)]
+        bits_per = 53.0
+        obs_kind = "random()"
+    elif source == "getrandbits":
+        calls = calls or max(700, (G.EFFECTIVE_BITS // bits) + 3 * G.N)  # margin for rank
+        obs = [victim.getrandbits(bits) for _ in range(calls)]
+        rec = G.recover_from_getrandbits(obs, bits)
+        words, certain = rec.predict_next_words(predict)
+        lo = 32 - bits
+        pred = [w >> lo for w in words]
+        actual = [victim.getrandbits(bits) for _ in range(predict)]
+        bits_per = float(bits)
+        obs_kind = f"getrandbits({bits})"
+    else:
+        raise ValueError(f"mt_source must be 'random' or 'getrandbits'; got {source!r}")
+    verified = bool(certain and rec.unique and pred == actual)
+    demo = RecoveryDemonstration(
+        observations_used=rec.observations_used, recovered_state_present=rec.unique,
+        predicted_next=pred, predicted_prev=[], verified=verified)
+    held = predict if verified else 0
+    cbound, clog2 = _coincidence(bits_per, held)
+    cert = Certificate(method="gf2_linear", candidates=(1 if rec.unique else None),
+                       unique=rec.unique, held_out_checked=held,
+                       coincidence_bound=cbound, coincidence_bound_log2=clog2)
+    params = {"source": source, "bits": bits, "calls": calls, "predict": predict, "seed": seed,
+              "rank": rec.rank, "effective_state_bits": G.EFFECTIVE_BITS,
+              "observation": f"{calls} consecutive {obs_kind} outputs (truncated words)"}
+    return _finish(
+        kind="mt19937_truncated", victim="python random.Random (MT19937), truncated outputs",
+        used="python", detail="CPython random.Random (Mersenne Twister)",
+        idiom_ids=(["py-random-module"] if source == "random" else ["py-random-getrandbits"]),
+        parameters=params,
+        reproduce=f"prng-lattice-lab demonstrate mt19937_truncated --seed {seed} "
+                  f"--mt-source {source} --mt-bits {bits} --predict {predict}",
+        demo=demo, cert=cert, citations=[_MT_CITE, _GF2_CITE])
 
 
 def _finish(*, kind, victim, used, detail, idiom_ids, parameters, reproduce, demo, cert,
@@ -343,11 +465,17 @@ def verify_record(record: dict) -> tuple[bool, str]:
     kind = record.get("kind")
     p = record.get("parameters", {})
     oracle = record.get("oracle", "lab_model")
+    # mt19937_truncated stores its own oracle ("python"); demonstrate() ignores `oracle`
+    # for the mt kinds, so re-running with the recorded value is safe for every kind.
     try:
         fresh = demonstrate(
             kind, seed=p.get("seed", 0), total=p.get("total", 20), offset=p.get("offset", 10),
             bound=p.get("bound", 255), window=p.get("window"), warmup=p.get("warmup", 1000),
-            predict=p.get("predict", 5), oracle=oracle)
+            predict=p.get("predict", 5),
+            oracle=(oracle if oracle in ("auto", "jvm", "lab_model") else "auto"),
+            mt_source=p.get("source", "random"), mt_bits=p.get("bits", 32),
+            mt_calls=p.get("calls"), rsu_bound=p.get("bound", 255),
+            rsu_accept=p.get("accept_count", 200))
     except (jvm_oracle.OracleUnavailable, ValueError) as exc:
         return False, f"could not re-run: {exc}"
     fd, sd = fresh.demonstration, record.get("demonstration", {})

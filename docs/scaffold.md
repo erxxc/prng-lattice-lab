@@ -34,6 +34,33 @@ config (typed)  ─▶  generate/  ─▶  recover/  ─▶  sweep/  ─▶  sto
   bits, odd bounds bias which bits survive (the elttam case).
 - `floats_to_msb24` — recover the exact 24-bit measurements from nextFloat outputs.
 
+### `recover/gaps.py`  — unknown-gap recovery (built)
+- Recovers state when observed tokens sit at UNKNOWN stream positions because some draws
+  were rejected and never observed (Java `nextInt` modulo-reject; RandomStringUtils
+  character-filter reject). `recover_unknown_gaps(observed, solver, ...)`: an anchor window
+  is gap-searched in fewest-rejections order (all-consecutive first), each candidate is
+  REPLAY-verified against ALL observations (which discovers the true gaps), so a verified
+  state is certain. Gaps are counted in STATE STEPS, unifying both rejection kinds.
+  `GapSolver` protocol; `ResidueGapSolver(bound, accept)` wraps `recover/residue`
+  (`residue.recover_pre_states_at_positions`, a positions-aware lattice solve). Bounded:
+  past `budget` it reports `budget_exhausted` = INFEASIBLE, never a guess (rule 8);
+  >1 verified state is reported as ambiguity. Scope: fits the small-window LATTICE solvers,
+  NOT the GF(2) MT solver (needs ~700 obs, too large to gap-enumerate) -- Python
+  `choice`/`randrange` rejection is disclosed out of scope for this technique.
+
+### `recover/mt19937_gf2.py`  — MT19937 from TRUNCATED outputs, GF(2) (built)
+- `SymbolicMT` mirrors CPython's twist+temper carrying each word-bit as a D=624·32-bit
+  vector over the initial-state basis; substituting a concrete state reproduces CPython
+  bit-for-bit (`test_mt19937_gf2.py`, Python as oracle). `GF2System` is online Gauss-Jordan
+  (exact `rank`). `recover_from_random(doubles)` / `recover_from_getrandbits(values, bits)`
+  add equations from the observable top bits and solve; `Recovery.unique` is `rank ==
+  EFFECTIVE_BITS` (19937) — a CERTIFIED uniqueness, not assumed. `predict_next_words` /
+  `concrete_state_words` predict forward or clone via `random.setstate`. ~700 `random()`
+  calls reach full rank (~0.5 s). Recovers STATE not seed (MT seeding is non-linear);
+  assumes observations start at a generator's first output (mid-stream offset search
+  deferred); word-0 low 31 bits are irrelevant and set 0. Serves the `py-random-module` /
+  `py-random-getrandbits` idioms the full-word `mt19937.py` untemper cannot.
+
 ### `mt19937.py`  — comparison victim, complete
 - MT19937 (Python `random`, Ruby, PHP) as the OPPOSITE corner of recoverability.
   `temper`/`untemper` (exact inverses), `recover_state` / `predict_next` — clone the

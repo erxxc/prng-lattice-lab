@@ -1,0 +1,43 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using these metadata."
+title: "prng-lattice-lab: recoverability of java.util.Random under partial-state leakage"
+abstract: >-
+  A closed, offline research harness that characterises the recoverability boundary of
+  java.util.Random under partial-state leakage. Anchored on the Randar (Minecraft)
+  truncated-LCG attack and generalised to a (bits-leaked-per-call x observations) phase
+  diagram, with complete lattice and GF(2) solvers for the top-bits, nextInt(odd-bound),
+  bit-length, and truncated-MT19937 leak models, and a fold-in seam to RepoAuditor as a
+  weak_rng_adapter. Recovery demonstrations are reproducible and self-verifying.
+type: software
+authors:
+  - name: erxxc
+version: "0.5.0"
+# date-released: "YYYY-MM-DD"   # TODO: set to the GitHub Release / tag date
+repository-code: "https://github.com/erxxc/prng-lattice-lab"
+url: "https://github.com/erxxc/prng-lattice-lab"
+license: MIT
+keywords:
+  - security
+  - pseudo-random number generator
+  - java.util.Random
+  - linear congruential generator
+  - mersenne twister
+  - mt19937
+  - lattice reduction
+  - LLL
+  - state recovery
+  - predictable tokens
+# TODO(after the GitHub-Zenodo webhook mints the DOIs on first Release): uncomment and fill,
+# mirroring the chainwatch pattern (concept DOI resolves to latest; version DOI pins v0.5.0).
+# identifiers:
+#   - type: doi
+#     value: 10.5281/zenodo.XXXXXXX
+#     description: "The version-specific DOI for v0.5.0, as archived on Zenodo."
+#   - type: doi
+#     value: 10.5281/zenodo.XXXXXXX
+#     description: "The concept DOI, which always resolves to the latest version."
+references:
+  - type: software
+    title: RepoAuditor
+    repository-code: "https://github.com/erxxc/repoauditor"
+    notes: "Consumes this harness's weak_rng_adapter demonstration as corroborating evidence."

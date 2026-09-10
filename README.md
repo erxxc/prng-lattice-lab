@@ -19,6 +19,8 @@ prng-lattice-lab demo 7338710 7668738 5563335   # crack + predict next/prev toke
 prng-lattice-lab retro --total 20 --offset 10   # reconstruct a whole token stream from one captured window
 prng-lattice-lab retro --total 30 --offset 12 --bound 255   # same for nextInt(odd) tokens (RandomStringUtils idiom)
 prng-lattice-lab mt-demo --warmup 1000          # MT19937 contrast: clone Python's random from 624 outputs
+prng-lattice-lab demonstrate nextint_odd --oracle jvm --out demo.json  # evidence artifact vs a REAL JVM (msb24|nextint_odd|seeded|mt19937)
+prng-lattice-lab demonstrate --verify demo.json        # re-check a stored artifact (tamper + re-run)
 prng-lattice-lab leaks --bits 8                 # characterise the 3 leak models, confirm H3
 prng-lattice-lab sweep --trials 200             # run the phase-diagram grid (top-bits leak)
 prng-lattice-lab sweep --model nextint_odd      # ... for the nextInt(odd) residue leak
@@ -37,7 +39,9 @@ prng-lattice-lab report 1 --narrate             # + optional LLM prose (needs ke
 | sweep + characterize + deterministic report | ✔ phase diagram, margin surface, exact-oracle calibration |
 | retroactive token-stream reconstruction | ✔ verified (`retro`) |
 | MT19937 comparison victim (exact untempering) | ✔ validated vs stdlib (`mt-demo`) |
-| repoauditor `weak_rng_adapter` demonstration path | ✔ reuses validated cracker |
+| repoauditor `weak_rng_adapter` demonstration path | ✔ reuses validated cracker; artifacts carry a uniqueness/coincidence certificate + content hash |
+| real-JVM oracle for demonstrations | ✔ `--oracle jvm` runs live OpenJDK `java.util.Random`; lab model matches it over random states (JDK optional) |
+| seeded-constructor recovery (`new Random(seed)`) | ✔ `demonstrate seeded` recovers the constructor seed (e.g. a wall-clock creation time) |
 | repoauditor `detect_in_source` (OPT-036) | ✔ merged (PR #129 detector, PR #130 plugin seam); `weak_rng` runs live in repoauditor |
 | measurement-noise injection (third phase axis) | ✔ wired (`LeakProfile.noise`) |
 | optional LLM narrative pass (`report --narrate`) | ✔ wired — key-gated, skip disclosed |

@@ -117,3 +117,42 @@ def test_row_budget_raises_instead_of_truncating():
     bound, trials = _cell(4, 16, 1, seed=0)                  # rho > 1: branching needed
     with pytest.raises(residue.RowBudgetExceeded):
         residue.recover_post_states_nextint_odd(trials[0].observations, bound, row_budget=200_000)
+
+
+@pytest.mark.parametrize("seed", range(12))
+def test_random_odd_bounds_recover_completely(seed):
+    # Property test over arbitrary odd bounds (not just 2^k-1 / 91), including large ones
+    # near 2^31 where Java's rejection loop fires often. Every non-rejection-shifted trial
+    # recovers completely (truth in the set); a unique result is certified by the solver.
+    import random
+    rng = random.Random(1000 + seed)
+    bound = rng.randrange(3, 1 << 31) | 1               # any odd bound in [3, 2^31)
+    n = max(2, (48 // max(1, bound.bit_length() - 1)) + 2)  # enough tokens for ~overdetermination
+    for _ in range(6):
+        state = rng.getrandbits(48)
+        gen = JavaRandom.from_internal_state(state)
+        obs = [gen.next_int(bound) for _ in range(n)]
+        if residue.rejections_in_window(state, n, bound):
+            continue                                     # outside the fixed-stride model, by design
+        pre, margin = residue.recover_pre_states_nextint_odd(obs, bound)
+        assert state in pre, f"completeness violated at bound={bound}"
+
+
+def test_large_bound_with_frequent_rejections_is_detected():
+    # A bound just over 2^30 rejects ~half of draws; the rejection counter must see them,
+    # and any window the solver's fixed-stride model does not cover is excluded, not wrong.
+    import random
+    bound = (1 << 30) + 1
+    rng = random.Random(77)
+    rejections_seen = complete = 0
+    for _ in range(60):
+        state = rng.getrandbits(48)
+        gen = JavaRandom.from_internal_state(state)
+        obs = [gen.next_int(bound) for _ in range(3)]
+        rej = residue.rejections_in_window(state, 3, bound)
+        rejections_seen += rej > 0
+        if rej == 0:
+            pre, _ = residue.recover_pre_states_nextint_odd(obs, bound)
+            assert state in pre
+            complete += 1
+    assert rejections_seen > 0 and complete > 0

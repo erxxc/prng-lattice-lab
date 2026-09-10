@@ -6,84 +6,421 @@
   "$defs": {
     "GeneratorSpec": {
       "type": "object",
-      "required": ["kind", "seeded_via"],
+      "required": [
+        "kind",
+        "seeded_via"
+      ],
       "properties": {
-        "kind": {"type": "string", "description": "generator identity, e.g. java.util.Random"},
-        "seeded_via": {"enum": ["internal_state", "constructor"]},
-        "world_seed": {"type": ["integer", "null"], "description": "only for full Randar coordinate inversion"}
+        "kind": {
+          "type": "string",
+          "description": "generator identity, e.g. java.util.Random"
+        },
+        "seeded_via": {
+          "enum": [
+            "internal_state",
+            "constructor"
+          ]
+        },
+        "world_seed": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "only for full Randar coordinate inversion"
+        }
       }
     },
     "LeakProfile": {
       "type": "object",
-      "required": ["model", "bits_per_call", "num_observations"],
+      "required": [
+        "model",
+        "bits_per_call",
+        "num_observations"
+      ],
       "properties": {
-        "model": {"enum": ["top_bits", "nextint_odd", "bit_length"]},
-        "bits_per_call": {"type": "integer", "minimum": 1, "maximum": 48},
-        "num_observations": {"type": "integer", "minimum": 1},
-        "call_stride": {"type": "integer", "minimum": 1, "default": 1}
+        "model": {
+          "enum": [
+            "top_bits",
+            "nextint_odd",
+            "bit_length"
+          ]
+        },
+        "bits_per_call": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 48
+        },
+        "num_observations": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "call_stride": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        }
       }
     },
     "SweepRun": {
       "type": "object",
-      "required": ["config", "lab_version", "created_at"],
+      "required": [
+        "config",
+        "lab_version",
+        "created_at"
+      ],
       "properties": {
-        "config": {"type": "object"},
-        "lab_version": {"type": "string"},
-        "created_at": {"type": "string", "format": "date-time"}
+        "config": {
+          "type": "object"
+        },
+        "lab_version": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
       }
     },
     "SweepCell": {
       "type": "object",
-      "required": ["bits_per_call", "num_observations", "trials", "successes", "method_used"],
+      "required": [
+        "bits_per_call",
+        "num_observations",
+        "trials",
+        "successes",
+        "method_used"
+      ],
       "properties": {
-        "bits_per_call": {"type": "integer"},
-        "num_observations": {"type": "integer"},
-        "trials": {"type": "integer", "minimum": 0},
-        "successes": {"type": "integer", "minimum": 0, "description": "trials with a UNIQUE, correct recovery (unique_candidate == ground truth)"},
-        "method_used": {"enum": ["roundoff", "enumerate", "residue_slice", "subset_enumerate", "none"], "description": "roundoff/enumerate = the top-bits box lattice; residue_slice = nextInt(odd) low-17-bit slicing + certified round-off (recover/residue.py); subset_enumerate = bit-length informative-subset lattice + complete enumeration (recover/starved.py); none = not attempted"},
-        "model": {"enum": ["top_bits", "nextint_odd", "bit_length"], "default": "top_bits", "description": "leak model the cell observed; absent/null on pre-0.2 rows means top_bits"},
-        "bound": {"type": ["integer", "null"], "description": "nextInt bound for nextint_odd / bit_length cells; null for top_bits"},
-        "leaked_bits": {"type": ["number", "null"], "description": "mean information actually leaked per trial: n*k for top_bits, n*log2(bound) for nextint_odd, mean sum(k-L+1) over the bit-length run. Drives the underdetermined/edge classification and the ideal-hash null instead of n*k."},
-        "median_ns": {"type": ["number", "null"]},
-        "mean_margin": {"type": ["number", "null"], "description": "mean ||M.e||_inf; <0.5 => round-off safe"},
-        "mean_candidates": {"type": ["number", "null"], "description": "mean size of the box-consistent state set across scored trials; 1.0 = clean unique recovery, >1 = collisions (recoverability edge). The rule-8 uncertainty-as-range field."},
-        "outcome": {"enum": ["recovered", "ambiguous", "underdetermined", "infeasible", "gap", null], "description": "recovered = every scored trial uniquely resolved; ambiguous = collisions present (see mean_candidates); underdetermined = leaked_bits more than half a bit below 48, so no unique state exists (information-theoretic, not a tooling limit); infeasible = the method exists but the trials' certified/complete enumeration cost exceeds the budget, so nothing was attempted (a disclosed solver limit, not a guess); gap = required method not wired (see capability_gap). `trials` counts SCORED trials only. Trials skipped for a disclosed per-trial reason (rejection-shifted window, infeasible enumeration budget, per-trial underdetermination) are itemised in capability_gap."},
-        "capability_gap": {"type": ["string", "null"], "description": "populated INSTEAD of a score when a required method is unavailable; never leave a gap silent"}
+        "bits_per_call": {
+          "type": "integer"
+        },
+        "num_observations": {
+          "type": "integer"
+        },
+        "trials": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "successes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "trials with a UNIQUE, correct recovery (unique_candidate == ground truth)"
+        },
+        "method_used": {
+          "enum": [
+            "roundoff",
+            "enumerate",
+            "residue_slice",
+            "subset_enumerate",
+            "none"
+          ],
+          "description": "roundoff/enumerate = the top-bits box lattice; residue_slice = nextInt(odd) low-17-bit slicing + certified round-off (recover/residue.py); subset_enumerate = bit-length informative-subset lattice + complete enumeration (recover/starved.py); none = not attempted"
+        },
+        "model": {
+          "enum": [
+            "top_bits",
+            "nextint_odd",
+            "bit_length"
+          ],
+          "default": "top_bits",
+          "description": "leak model the cell observed; absent/null on pre-0.2 rows means top_bits"
+        },
+        "bound": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "nextInt bound for nextint_odd / bit_length cells; null for top_bits"
+        },
+        "leaked_bits": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "mean information actually leaked per trial: n*k for top_bits, n*log2(bound) for nextint_odd, mean sum(k-L+1) over the bit-length run. Drives the underdetermined/edge classification and the ideal-hash null instead of n*k."
+        },
+        "median_ns": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "mean_margin": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "mean ||M.e||_inf; <0.5 => round-off safe"
+        },
+        "mean_candidates": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "mean size of the box-consistent state set across scored trials; 1.0 = clean unique recovery, >1 = collisions (recoverability edge). The rule-8 uncertainty-as-range field."
+        },
+        "outcome": {
+          "enum": [
+            "recovered",
+            "ambiguous",
+            "underdetermined",
+            "infeasible",
+            "gap",
+            null
+          ],
+          "description": "recovered = every scored trial uniquely resolved; ambiguous = collisions present (see mean_candidates); underdetermined = leaked_bits more than half a bit below 48, so no unique state exists (information-theoretic, not a tooling limit); infeasible = the method exists but the trials' certified/complete enumeration cost exceeds the budget, so nothing was attempted (a disclosed solver limit, not a guess); gap = required method not wired (see capability_gap). `trials` counts SCORED trials only. Trials skipped for a disclosed per-trial reason (rejection-shifted window, infeasible enumeration budget, per-trial underdetermination) are itemised in capability_gap."
+        },
+        "capability_gap": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "populated INSTEAD of a score when a required method is unavailable; never leave a gap silent"
+        }
       }
     },
     "RecoveryDemonstration": {
       "type": "object",
       "description": "Reproducible corroborating evidence that licenses a severity upgrade in repoauditor. Not a prior, not an opinion.",
-      "required": ["observations_used", "recovered_state_present"],
+      "required": [
+        "observations_used",
+        "recovered_state_present"
+      ],
       "properties": {
-        "observations_used": {"type": "integer", "minimum": 0},
-        "recovered_state_present": {"type": "boolean"},
-        "predicted_next": {"type": "array", "items": {"type": "integer"}},
-        "predicted_prev": {"type": "array", "items": {"type": "integer"}},
-        "verified": {"type": "boolean", "description": "predictions matched held-back ground truth"}
+        "observations_used": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "recovered_state_present": {
+          "type": "boolean"
+        },
+        "predicted_next": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "predicted_prev": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "verified": {
+          "type": "boolean",
+          "description": "predictions matched held-back ground truth"
+        }
+      }
+    },
+    "DemonstrationArtifact": {
+      "type": "object",
+      "description": "A self-contained, reproducible recovery demonstration emitted by `prng-lattice-lab demonstrate`. This is the payload a human attaches to a repoauditor finding (or an evidence-intake path ingests) as the independent corroborating source that licenses a severity upgrade under normalize/adjudicate. Every artifact carries its reproduction command, lab version, citations and an exact verification against held-back ground truth; nothing here is a claim without a check.",
+      "required": [
+        "kind",
+        "victim",
+        "oracle",
+        "lab_version",
+        "created_at",
+        "reproduce",
+        "demonstration",
+        "certificate",
+        "citations",
+        "verified",
+        "claim_boundary",
+        "content_sha256"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "msb24",
+            "nextint_odd",
+            "seeded",
+            "mt19937"
+          ],
+          "description": "msb24 = nextFloat top-24-bit tokens (Randar path); nextint_odd = nextInt(odd bound) tokens (RandomStringUtils idiom, recover/residue); seeded = recover the new Random(seed) constructor seed from outputs (often a wall-clock creation time); mt19937 = full 32-bit outputs of Python's random (exact untempering)"
+        },
+        "victim": {
+          "type": "string",
+          "description": "generator identity, e.g. java.util.Random or python random.Random (MT19937)"
+        },
+        "idiom_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "repoauditor weak_rng idiom ids this demonstration corroborates"
+        },
+        "parameters": {
+          "type": "object",
+          "description": "kind-specific parameters (bound, window, offset, total, seed, warmup)"
+        },
+        "lab_version": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "reproduce": {
+          "type": "string",
+          "description": "the exact CLI command that regenerates this artifact"
+        },
+        "demonstration": {
+          "$ref": "#/$defs/RecoveryDemonstration"
+        },
+        "citations": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/Citation"
+          }
+        },
+        "verified": {
+          "type": "boolean",
+          "description": "predictions matched held-back ground truth exactly; an unverified artifact must not be used as corroboration"
+        },
+        "claim_boundary": {
+          "type": "string",
+          "description": "what this artifact does and does NOT establish (it proves the generator class is recoverable from the stated observations; it does not by itself prove the flagged code exposes those observations)"
+        },
+        "oracle": {
+          "enum": [
+            "jvm",
+            "lab_model"
+          ],
+          "description": "generator that produced the observed tokens: jvm = a real OpenJDK java.util.Random process (adapt.jvm_oracle), lab_model = the lab's port. A jvm artifact is evidence the model matches the real generator beyond the pinned vector."
+        },
+        "oracle_detail": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "e.g. the `java -version` line, when oracle == jvm"
+        },
+        "certificate": {
+          "$ref": "#/$defs/Certificate"
+        },
+        "content_sha256": {
+          "type": "string",
+          "description": "sha256 over the canonical record with this field blanked; tamper-evidence for evidence intake"
+        }
       }
     },
     "Citation": {
       "type": "object",
-      "required": ["source", "locator"],
+      "required": [
+        "source",
+        "locator"
+      ],
       "properties": {
-        "source": {"type": "string"},
-        "locator": {"type": "string"},
-        "note": {"type": "string"}
+        "source": {
+          "type": "string"
+        },
+        "locator": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        }
       }
     },
     "WeakRngCandidateFinding": {
       "type": "object",
       "description": "The record the fold-in emits into repoauditor's detect->triage flow. Mirrors CandidateFinding + an RNG demonstration payload. Severity is deliberately ABSENT: repoauditor's normalize/adjudicate owns and licenses severity.",
-      "required": ["rule_id", "message", "trust_boundary", "recoverability", "citations"],
+      "required": [
+        "rule_id",
+        "message",
+        "trust_boundary",
+        "recoverability",
+        "citations"
+      ],
       "properties": {
-        "rule_id": {"type": "string"},
-        "message": {"type": "string"},
-        "location_placeholder": {"type": "string"},
-        "trust_boundary": {"type": "string"},
-        "recoverability": {"enum": ["proven", "likely", "possible"]},
-        "citations": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/Citation"}},
-        "demonstration": {"oneOf": [{"$ref": "#/$defs/RecoveryDemonstration"}, {"type": "null"}]}
+        "rule_id": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "location_placeholder": {
+          "type": "string"
+        },
+        "trust_boundary": {
+          "type": "string"
+        },
+        "recoverability": {
+          "enum": [
+            "proven",
+            "likely",
+            "possible"
+          ]
+        },
+        "citations": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/Citation"
+          }
+        },
+        "demonstration": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/RecoveryDemonstration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "Certificate": {
+      "type": "object",
+      "description": "The uniqueness / false-match proof behind a demonstration's `verified` flag.",
+      "required": [
+        "method",
+        "held_out_checked",
+        "coincidence_bound",
+        "coincidence_bound_log2"
+      ],
+      "properties": {
+        "method": {
+          "type": "string",
+          "description": "roundoff | residue_slice | untemper | seed_unscramble"
+        },
+        "candidates": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "consistent-state count from a COMPLETE solver (1 == certified unique); null when the method does not enumerate (e.g. roundoff)"
+        },
+        "unique": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": "candidates == 1; null when not enumerated"
+        },
+        "held_out_checked": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "tokens predicted and matched against held-back ground truth"
+        },
+        "coincidence_bound": {
+          "type": "number",
+          "description": "P(a wrong state reproduces all held-out tokens by chance) ~= 2^(-bits*held_out); may underflow to 0.0"
+        },
+        "coincidence_bound_log2": {
+          "type": "number",
+          "description": "log2 of coincidence_bound, readable when the bound underflows"
+        },
+        "certified_radius": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "the residue solver's worst-case round-off radius (<0.5 => one candidate per slice); null for other methods"
+        }
       }
     }
   }

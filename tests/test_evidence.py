@@ -165,3 +165,37 @@ def test_cli_mt19937_truncated_roundtrip(tmp_path):
     rec = json.loads(out.read_text())
     assert rec["oracle"] == "python" and rec["verified"] is True
     assert main(["demonstrate", "--verify", str(out)]) == 0
+
+
+def test_randomstringutils_recovers_through_rejections():
+    pytest.importorskip("fpylll")
+    a = evidence.demonstrate("randomstringutils", seed=3, rsu_bound=255, rsu_accept=200,
+                             total=10, predict=4, oracle="lab_model")
+    assert a.verified and a.kind == "randomstringutils"
+    assert a.idiom_ids == ["apache-randomstringutils"]
+    assert a.certificate.method == "residue_gap" and a.certificate.unique is True
+    assert a.parameters["reject_fraction"] > 0.2          # real rejections were present
+    assert a.parameters["anchor_rejections_solved"] >= 0
+    assert a.parameters["gap_pattern"] is not None        # a concrete solved gap pattern
+    evidence.validate_record(a.to_record(), SCHEMA)
+    ok, _ = evidence.verify_record(a.to_record())
+    assert ok
+
+
+@pytest.mark.skipif(not jvm_oracle.available(), reason="no JDK for the JVM oracle")
+def test_randomstringutils_jvm_backed():
+    a = evidence.demonstrate("randomstringutils", seed=3, oracle="jvm")
+    assert a.oracle == "jvm" and a.verified
+    ok, _ = evidence.verify_record(a.to_record())
+    assert ok
+
+
+def test_cli_randomstringutils_roundtrip(tmp_path):
+    pytest.importorskip("fpylll")
+    out = tmp_path / "rsu.json"
+    assert main(["demonstrate", "randomstringutils", "--seed", "3", "--oracle", "lab_model",
+                 "--out", str(out)]) == 0
+    import json
+    rec = json.loads(out.read_text())
+    assert rec["kind"] == "randomstringutils" and rec["verified"] is True
+    assert main(["demonstrate", "--verify", str(out)]) == 0

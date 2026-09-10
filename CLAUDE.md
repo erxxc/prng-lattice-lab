@@ -29,6 +29,7 @@ generate/ ─▶ recover/ ─▶ sweep/ ─▶ characterize/ ─▶ (report/  | 
               starved*
               mt19937*
               mt19937_gf2*
+              gaps*
 ```
 
 `*` complete and validated · `†` specified, not yet wired.
@@ -198,6 +199,7 @@ prng-lattice-lab mt-demo --warmup 1000            # MT19937 contrast: clone stdl
 prng-lattice-lab demonstrate nextint_odd --oracle jvm --out demo.json  # evidence artifact vs a REAL JVM (msb24|nextint_odd|seeded|mt19937)
 prng-lattice-lab demonstrate --verify demo.json   # re-verify a stored artifact (tamper + re-run)
 prng-lattice-lab demonstrate mt19937_truncated --seed 5   # recover MT19937 state from TRUNCATED random()/getrandbits by GF(2)
+prng-lattice-lab demonstrate randomstringutils --seed 3   # recover through RandomStringUtils char-filter REJECTIONS (unknown-gap)
 prng-lattice-lab leaks --bits 8                   # characterise the 3 leak models; confirm H3
 pytest -q                                         # correctness gate
 ```

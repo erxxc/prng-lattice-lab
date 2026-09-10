@@ -1,0 +1,37 @@
+{
+  "upload_type": "software",
+  "title": "prng-lattice-lab: recoverability of java.util.Random under partial-state leakage",
+  "description": "<p>A closed, offline research harness that maps the recoverability boundary of <code>java.util.Random</code> under partial-state leakage, anchored on the Randar (Minecraft) truncated-LCG attack and generalised to a (bits-leaked-per-call &times; observations) phase diagram. Complete solvers cover the top-bits, nextInt(odd-bound), bit-length, and truncated-MT19937 leak models; recovery demonstrations are reproducible, self-verifying, and can run against a real OpenJDK.</p><p><strong>Demonstrated vs. generalized:</strong> what is demonstrated is state recovery from the stated observations of a generator the lab instantiates itself (e.g. the published Randar vector; the recorded phase-diagram cells; the lab model matching a live OpenJDK over sampled states). It is <em>not</em> a claim that any specific deployed system exposes those observations across a trust boundary. It attacks no live target and no third-party system.</p>",
+  "license": "MIT",
+  "access_right": "open",
+  "version": "0.5.0",
+  "keywords": [
+    "pseudo-random number generator",
+    "java.util.Random",
+    "linear congruential generator",
+    "Mersenne Twister",
+    "MT19937",
+    "lattice reduction",
+    "LLL",
+    "state recovery",
+    "predictable tokens",
+    "security research"
+  ],
+  "creators": [
+    { "name": "erxxc" }
+  ],
+  "related_identifiers": [
+    {
+      "relation": "isSupplementTo",
+      "identifier": "https://github.com/erxxc/repoauditor",
+      "scheme": "url",
+      "resource_type": "software"
+    },
+    {
+      "relation": "isSourceOf",
+      "identifier": "https://github.com/erxxc/prng-lattice-lab",
+      "scheme": "url",
+      "resource_type": "software"
+    }
+  ]
+}

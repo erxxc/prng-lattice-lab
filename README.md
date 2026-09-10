@@ -1,10 +1,13 @@
 # prng-lattice-lab
+<!-- TODO(after first Zenodo release via the GitHub-Zenodo webhook): replace with the
+     concept-DOI badge, chainwatch style:
+     [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.XXXXXXX.svg)](https://doi.org/10.5281/zenodo.XXXXXXX) -->
 
 A closed, offline harness for characterising the recoverability boundary of
 `java.util.Random` under partial-state leakage. Anchored on the **Randar**
 (Minecraft) truncated-LCG attack; generalised to a *(bits-leaked-per-call ×
-number-of-observations)* phase diagram; with a fold-in seam to **repoauditor** as
-a `weak_rng_adapter`.
+number-of-observations)* phase diagram; with a fold-in seam to [**RepoAuditor**](https://github.com/erxxc/repoauditor)
+as a `weak_rng_adapter`.
 
 It attacks a generator it instantiates itself — no network target, no third-party
 system. This is a diligence/defensive research tool: the point is to detect and
@@ -70,3 +73,49 @@ prompts/               versioned report prompts (never edited in place)
 src/prng_lattice_lab/  lcg · generate · recover · sweep · characterize · store · adapt · report
 tests/                 correctness gate incl. the Randar vector
 ```
+
+## Demonstrated vs. generalized
+
+Keep the two apart when reading the results table above:
+
+- **Demonstrated (exact).** The published Randar vector recovers; the phase-diagram cells
+  recover at the recorded rates and candidate counts; the lab's `java.util.Random` model
+  matches a live OpenJDK over sampled random states (`--oracle jvm`); and every
+  `demonstrate` artifact states its own held-out count and false-match (coincidence) bound
+  in its certificate.
+- **Generalized.** The recoverability boundary is characterised on a generator the lab
+  **instantiates itself**. Nothing here asserts that a specific deployed system exposes the
+  required observations across a trust boundary — that link is the reviewer's to establish.
+  Each emitted artifact carries this claim boundary explicitly.
+
+## Reproducibility
+
+Runs are deterministic in their `--seed`. Core path needs only Python ≥3.11 + `numpy`.
+The general solvers need `fpylll` + `cysignals` (`.[lattice]`). Tested versions for the
+published results: **Python 3.12, numpy ≥1.26, fpylll 0.6.4 + cysignals**, `jsonschema`
+optional; a JDK (OpenJDK 21 here) is optional and only used by `--oracle jvm`. The CI gate
+runs on 3.11 and 3.12.
+
+## Security & responsible use
+
+This is an **offline research harness** — it attacks a generator it instantiates itself,
+with no live target. Report issues in the tool via GitHub private security advisories; see
+[`SECURITY.md`](SECURITY.md) for scope and responsible-use guidance. Do not use it against
+systems you do not own or are not authorized to test.
+
+## License
+
+[MIT](LICENSE) © 2026 erxxc — the same license as
+[RepoAuditor](https://github.com/erxxc/repoauditor), so the `weak_rng_adapter` fold-in
+stays friction-free.
+
+## Citing
+
+Cite via [`CITATION.cff`](CITATION.cff) (GitHub renders it as a "Cite this repository"
+button). The archive and DOIs are minted by the **GitHub-Zenodo integration**: enable the
+repository in Zenodo, publish a GitHub Release for the tag, and Zenodo archives the tarball
+and mints two DOIs (concept + version), which are then backfilled here — the same flow as
+[chainwatch](https://github.com/erxxc/chainwatch).
+
+- **Concept DOI** (always resolves to the latest version): _minted at first release_
+- **v0.5.0 DOI** (this exact release, for reproducibility): _minted at first release_

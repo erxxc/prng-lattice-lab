@@ -11,8 +11,9 @@ Commands:
   retro        reconstruct a whole token stream from one captured window (nextFloat
                  tokens, or nextInt(odd bound) tokens with --bound)
   demonstrate  emit a schema-validated DemonstrationArtifact (msb24 | nextint_odd |
-                 seeded | mt19937), optionally against a REAL JVM (--oracle jvm), with a
-                 uniqueness/coincidence certificate; --verify re-checks a stored artifact
+                 seeded | mt19937 | mt19937_truncated), optionally against a REAL JVM
+                 (--oracle jvm); mt19937_truncated recovers MT state from truncated Python
+                 outputs by GF(2) solve; --verify re-checks a stored artifact
 
 Uses argparse (stdlib) to keep the scaffold dependency-light; swap for typer/click
 if the CLI grows.
@@ -173,7 +174,8 @@ def cmd_demonstrate(args) -> int:
     try:
         art = evidence.demonstrate(
             args.kind, seed=args.seed, total=args.total, offset=args.offset, bound=args.bound,
-            window=args.window, warmup=args.warmup, predict=args.predict, oracle=args.oracle)
+            window=args.window, warmup=args.warmup, predict=args.predict, oracle=args.oracle,
+            mt_source=args.mt_source, mt_bits=args.mt_bits, mt_calls=args.mt_calls)
     except jvm_oracle.OracleUnavailable as exc:
         print(f"demonstrate: {exc}", file=sys.stderr)
         return 2
@@ -277,7 +279,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("demonstrate", help="emit a self-contained, schema-validated recovery "
                                             "demonstration artifact (the corroborating evidence "
                                             "payload for a repoauditor weak_rng finding)")
-    sp.add_argument("kind", nargs="?", choices=["msb24", "nextint_odd", "seeded", "mt19937"],
+    sp.add_argument("kind", nargs="?",
+                    choices=["msb24", "nextint_odd", "seeded", "mt19937", "mt19937_truncated"],
                     help="omit when using --verify")
     sp.add_argument("--seed", type=int, default=0)
     sp.add_argument("--total", type=int, default=20, help="tokens issued (msb24 / nextint_odd / seeded)")
@@ -285,7 +288,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--bound", type=int, default=255, help="odd nextInt bound (nextint_odd)")
     sp.add_argument("--window", type=int, default=None, help="window size (nextint_odd; default ~56 bits)")
     sp.add_argument("--warmup", type=int, default=1000, help="outputs skipped before capture (mt19937)")
-    sp.add_argument("--predict", type=int, default=5, help="outputs predicted and checked (mt19937)")
+    sp.add_argument("--predict", type=int, default=5, help="outputs predicted and checked (mt19937*)")
+    sp.add_argument("--mt-source", choices=["random", "getrandbits"], default="random",
+                    help="mt19937_truncated observation type: random() (53 bits/call) or getrandbits(k)")
+    sp.add_argument("--mt-bits", type=int, default=32, help="k for mt19937_truncated --mt-source getrandbits")
+    sp.add_argument("--mt-calls", type=int, default=None, help="observed calls (default: enough for full rank)")
     sp.add_argument("--oracle", choices=["auto", "jvm", "lab_model"], default="auto",
                     help="token source for the java kinds: auto uses a real JVM when present, "
                          "jvm requires a JDK, lab_model forces the port")

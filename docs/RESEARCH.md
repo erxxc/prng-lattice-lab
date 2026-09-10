@@ -150,7 +150,14 @@ appendix (run id, seed, trial count, lab + prompt versions).
   (`demonstrate --verify`), and a `seeded` kind that recovers a `new Random(seed)`
   constructor seed (e.g. a creation timestamp). Intake proposed in
   `docs/repoauditor-evidence-intake.md`; the Python detector (`weak_rng_py`) is built as an
-  additive plugin on a local repoauditor branch.
+  additive plugin on a local repoauditor branch. **2026-09-10:** `recover/mt19937_gf2`
+  recovers MT19937 STATE from TRUNCATED Python outputs (`random()` 53 bits/call,
+  `getrandbits(k)` k bits/call) by GF(2) linear solve — ~700 `random()` calls reach full
+  rank 19937 (certified unique) and clone the generator. This gives the Python detector's
+  `py-random-module` idiom a verified demonstration (`demonstrate mt19937_truncated`),
+  closing the gap noted earlier. Recovers state not seed (MT seeding non-linear); the
+  rejection-sampled idioms (`choice`/`randrange`) share the variable-gap structure with
+  RandomStringUtils and remain the next item.
 - **risk-quant calibration:** the margin curve is a closed-form-checkable oracle to
   validate prediction-interval coverage (session G) before applying it to noisy data.
   **Scoped 2026-09-09** as a repoauditor proposal (held branch

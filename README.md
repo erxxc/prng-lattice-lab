@@ -22,6 +22,7 @@ prng-lattice-lab mt-demo --warmup 1000          # MT19937 contrast: clone Python
 prng-lattice-lab demonstrate nextint_odd --oracle jvm --out demo.json  # evidence artifact vs a REAL JVM (msb24|nextint_odd|seeded|mt19937)
 prng-lattice-lab demonstrate --verify demo.json        # re-check a stored artifact (tamper + re-run)
 prng-lattice-lab demonstrate mt19937_truncated --seed 5  # recover MT19937 from truncated random()/getrandbits (GF(2))
+prng-lattice-lab demonstrate randomstringutils --seed 3  # recover through RandomStringUtils char-filter rejections (unknown-gap)
 prng-lattice-lab leaks --bits 8                 # characterise the 3 leak models, confirm H3
 prng-lattice-lab sweep --trials 200             # run the phase-diagram grid (top-bits leak)
 prng-lattice-lab sweep --model nextint_odd      # ... for the nextInt(odd) residue leak
@@ -43,6 +44,7 @@ prng-lattice-lab report 1 --narrate             # + optional LLM prose (needs ke
 | repoauditor `weak_rng_adapter` demonstration path | ✔ reuses validated cracker; artifacts carry a uniqueness/coincidence certificate + content hash |
 | real-JVM oracle for demonstrations | ✔ `--oracle jvm` runs live OpenJDK `java.util.Random`; lab model matches it over random states (JDK optional) |
 | seeded-constructor recovery (`new Random(seed)`) | ✔ `demonstrate seeded` recovers the constructor seed (e.g. a wall-clock creation time) |
+| RandomStringUtils recovery through char-filter rejections | ✔ `recover/gaps`: unknown-gap wrapper over the residue solver; `demonstrate randomstringutils` solves through rejections instead of excluding them |
 | MT19937 recovery from TRUNCATED outputs (GF(2)) | ✔ `recover/mt19937_gf2`: `random()` / `getrandbits(k)` state recovery + clone; `demonstrate mt19937_truncated` |
 | repoauditor `detect_in_source` (OPT-036) | ✔ merged (PR #129 detector, PR #130 plugin seam); `weak_rng` runs live in repoauditor |
 | measurement-noise injection (third phase axis) | ✔ wired (`LeakProfile.noise`) |

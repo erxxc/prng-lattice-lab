@@ -157,7 +157,16 @@ appendix (run id, seed, trial count, lab + prompt versions).
   `py-random-module` idiom a verified demonstration (`demonstrate mt19937_truncated`),
   closing the gap noted earlier. Recovers state not seed (MT seeding non-linear); the
   rejection-sampled idioms (`choice`/`randrange`) share the variable-gap structure with
-  RandomStringUtils and remain the next item.
+  RandomStringUtils and remain the next item. **2026-09-10:** the variable-gap model is
+  built (`recover/gaps.py`): an unknown-gap wrapper over the residue solver recovers
+  java.util.Random state THROUGH RandomStringUtils character-filter rejections (anchor +
+  fewest-rejections gap search + replay verification; `demonstrate randomstringutils`),
+  solving windows the fixed-stride residue path used to exclude -- fast at low reject
+  rates, honest `infeasible` past a budget at high ones (rule 8). Gaps are counted in
+  state steps, so nextInt modulo-rejection and char-filter rejection are one mechanism.
+  DISCLOSED boundary: this anchor technique needs a small recovery window, so it does NOT
+  extend to the GF(2) MT solver (~700 obs); Python `random.choice`/`randrange` rejection
+  sampling would need a different technique (SAT / meet-in-the-middle), out of scope.
 - **risk-quant calibration:** the margin curve is a closed-form-checkable oracle to
   validate prediction-interval coverage (session G) before applying it to noisy data.
   **Scoped 2026-09-09** as a repoauditor proposal (held branch

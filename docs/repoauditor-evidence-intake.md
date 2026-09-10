@@ -18,7 +18,7 @@ artifacts. So the evidence exists (the lab emits it) but cannot license anything
 
 ## What the lab provides (built)
 
-`prng-lattice-lab demonstrate {msb24|nextint_odd|seeded|mt19937|mt19937_truncated}` emits a
+`prng-lattice-lab demonstrate {msb24|nextint_odd|seeded|mt19937|mt19937_truncated|randomstringutils}` emits a
 `DemonstrationArtifact` (`schema/records.schema.json`): kind, victim, the repoauditor
 idiom ids it corroborates, parameters, lab version, the exact reproduction command,
 citations, the predictions, an **exact verification against held-back ground truth**,

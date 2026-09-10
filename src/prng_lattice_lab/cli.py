@@ -175,7 +175,8 @@ def cmd_demonstrate(args) -> int:
         art = evidence.demonstrate(
             args.kind, seed=args.seed, total=args.total, offset=args.offset, bound=args.bound,
             window=args.window, warmup=args.warmup, predict=args.predict, oracle=args.oracle,
-            mt_source=args.mt_source, mt_bits=args.mt_bits, mt_calls=args.mt_calls)
+            mt_source=args.mt_source, mt_bits=args.mt_bits, mt_calls=args.mt_calls,
+            rsu_bound=args.rsu_bound, rsu_accept=args.rsu_accept)
     except jvm_oracle.OracleUnavailable as exc:
         print(f"demonstrate: {exc}", file=sys.stderr)
         return 2
@@ -280,7 +281,8 @@ def build_parser() -> argparse.ArgumentParser:
                                             "demonstration artifact (the corroborating evidence "
                                             "payload for a repoauditor weak_rng finding)")
     sp.add_argument("kind", nargs="?",
-                    choices=["msb24", "nextint_odd", "seeded", "mt19937", "mt19937_truncated"],
+                    choices=["msb24", "nextint_odd", "seeded", "mt19937", "mt19937_truncated",
+                             "randomstringutils"],
                     help="omit when using --verify")
     sp.add_argument("--seed", type=int, default=0)
     sp.add_argument("--total", type=int, default=20, help="tokens issued (msb24 / nextint_odd / seeded)")
@@ -293,6 +295,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help="mt19937_truncated observation type: random() (53 bits/call) or getrandbits(k)")
     sp.add_argument("--mt-bits", type=int, default=32, help="k for mt19937_truncated --mt-source getrandbits")
     sp.add_argument("--mt-calls", type=int, default=None, help="observed calls (default: enough for full rank)")
+    sp.add_argument("--rsu-bound", type=int, default=255, help="odd nextInt bound (randomstringutils)")
+    sp.add_argument("--rsu-accept", type=int, default=200, help="in-class count: keep nextInt(bound) < this (randomstringutils)")
     sp.add_argument("--oracle", choices=["auto", "jvm", "lab_model"], default="auto",
                     help="token source for the java kinds: auto uses a real JVM when present, "
                          "jvm requires a JDK, lab_model forces the port")

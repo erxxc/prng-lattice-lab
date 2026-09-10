@@ -243,3 +243,71 @@ def rejections_in_window(pre_state: int, num_observations: int, bound: int,
                 break
         rejected += steps - 1
     return rejected
+
+
+# --- unknown-gap support: observations at arbitrary state-step positions -------------
+
+_BASIS_POS: dict[tuple, tuple] = {}
+
+
+def slice_basis_positions(positions: tuple[int, ...]) -> tuple:
+    """(R, M) for observations whose next(31) draws sit at the given STATE-STEP positions
+    (positions[0] is the base, 0). Generalises `slice_basis` from a uniform stride to
+    arbitrary per-step gaps -- the multiplier from the base to position p is a^p. Cached
+    by the position tuple; needs fpylll once per distinct pattern."""
+    key = tuple(positions)
+    if key not in _BASIS_POS:
+        g, _ = lattice.strided_lcg(1)
+        p0 = positions[0]
+        n = len(positions)
+        first = [pow(g, p - p0, MOD31) for p in positions]
+        rows = [first] + [[MOD31 if j == i else 0 for j in range(n)] for i in range(1, n)]
+        reduced = lattice.reduce(rows)
+        import numpy as _np
+        R = _np.array(reduced, dtype=_np.int64)
+        M = _np.linalg.inv(R.astype(float).T)
+        _BASIS_POS[key] = (R, M)
+    return _BASIS_POS[key]
+
+
+def recover_pre_states_at_positions(values, bound: int, positions: tuple[int, ...]):
+    """Every pre-stream state (before the first observed draw) consistent with `values`
+    observed at the given STATE-STEP `positions` (positions[0] == 0). A generalisation of
+    `recover_post_states_nextint_odd` to non-uniform gaps: the low 17 bits are enumerated
+    as 2^17 slices advanced by each gap, the 31-bit top half is a certified round-off in
+    the position-dependent lattice. Returns sorted candidate pre-stream states (COMPLETE;
+    a garbage guard is applied by the caller's replay). fpylll required."""
+    import numpy as _np
+    if bound <= 1 or bound % 2 == 0:
+        raise ValueError(f"bound must be an odd integer > 1; got {bound}")
+    n = len(values)
+    if n < 1 or positions[0] != 0:
+        raise ValueError("positions must be non-empty with positions[0] == 0")
+    A_u = _np.uint64(lattice.A); B_u = _np.uint64(lattice.B); MK = _np.uint64(MASK)
+    R, M = slice_basis_positions(tuple(positions))
+    Q = MOD31 // bound
+    beta = pow(bound, -1, MOD31); beta_u = _np.uint64(beta); m31 = _np.uint64(MOD31 - 1)
+    r0 = _np.arange(SLICES, dtype=_np.uint64)
+    sig = r0.copy(); prev = 0
+    E = _np.empty((SLICES, n), dtype=_np.int64)
+    for t, pos in enumerate(positions):
+        for _ in range(pos - prev):
+            sig = (sig * A_u + B_u) & MK
+        prev = pos
+        D = (sig >> _np.uint64(LOW_BITS)) & m31
+        dv = (D - _np.uint64(values[t] % MOD31)) & m31
+        E[:, t] = ((beta_u * dv) & m31).astype(_np.int64)
+    lo = -E; hi = Q - E
+    center = (lo + hi) / 2.0
+    rho = _np.abs(M) @ _np.full(n, Q / 2.0) * (1.0 + 1e-9) + 1e-9
+    z = center @ M.T
+    zint = _np.rint(z).astype(_np.int64)
+    pts = zint @ R
+    ok = _np.all((pts >= lo) & (pts < hi), axis=1)
+    out = set()
+    for j in _np.nonzero(ok)[0]:
+        x_prime = int(pts[j, 0]) % MOD31
+        X = (bound * x_prime) % MOD31
+        s_first = (X << LOW_BITS) | int(r0[j])   # state AFTER the first observed draw
+        out.add(step_back(s_first))              # pre-stream state (before the first draw)
+    return sorted(out)

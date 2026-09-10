@@ -182,7 +182,26 @@ config (typed)  ─▶  generate/  ─▶  recover/  ─▶  sweep/  ─▶  sto
   (rules 7 & 8). Both branches are tested (fake-SDK injection for the with-key path).
 - Takes `schema` and `prompt` as explicit inputs (the requested contract).
 
-### `adapt/`  — contract complete; detect half pending
+### `adapt/jvm_oracle.py`  — real-JVM oracle (built; JDK optional)
+- Compiles a tiny Java emitter once (`_classes_dir`, cached) and runs a live
+  `java.util.Random`; `emit(state, kind, n, bound)` returns `msb24` / `nextint` tokens.
+  No reflection: `new Random(state ^ 0x5DEECE66D)` sets the internal seed to `state`.
+  `available()` / `java_version()` gate it; absence degrades to the lab model, recorded.
+  Matches the lab model over random states on both idioms (`test_jvm_oracle.py`).
+
+### `adapt/evidence.py`  — demonstration artifacts (built)
+- `demonstrate(kind, ..., oracle=)` → `DemonstrationArtifact` for `msb24` (roundoff),
+  `nextint_odd` (recover/residue), `seeded` (recover the `new Random(seed)` constructor
+  seed — often a wall-clock time — via roundoff + unscramble) or `mt19937` (exact
+  untempering). Each artifact carries: `oracle` (`jvm` real OpenJDK vs `lab_model`), a
+  `Certificate` (complete-solver candidate count + a false-match `coincidence_bound`
+  ~2^(-bits·held_out) + the residue radius), a tamper-evident `content_sha256`, the
+  reproduction command, citations, predictions, exact verification, claim boundary.
+  Deterministic in `seed`. `verify_record` re-checks the hash then re-runs; `validate_record`
+  checks the schema before the CLI emits. An ambiguous window yields `recovered=false` with
+  the candidate count, never a guess. See `docs/repoauditor-evidence-intake.md` for intake.
+
+### `adapt/`  — contract complete; detect half landed in repoauditor
 - `contract.py` — mirror of repoauditor's `CandidateFinding` + `RecoveryDemonstration`.
   **Verified against the live contract 2026-08-18** (repoauditor `detect/ensemble.py`
   + `matching.py`); corrections tracked as repoauditor OPT-036. Note the earlier

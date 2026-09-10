@@ -142,9 +142,22 @@ appendix (run id, seed, trial count, lab + prompt versions).
   live recovery demonstration is a corroborating source for severity licensing.
   **Landed** (PR #129 detector, PR #130 plugin-manifest seam; 2026-09-09). All three
   detector idioms now have a lab-side demonstration path (top-bits: `demo`/`retro`;
-  RandomStringUtils: `retro --bound`). Next: carry the `RecoveryDemonstration` into
-  the finding's rationale/artifact so adjudicate can license the upgrade.
+  RandomStringUtils: `retro --bound`; Python `random`: `mt19937`). `prng-lattice-lab
+  demonstrate` emits the `DemonstrationArtifact` payload — now against a REAL OpenJDK
+  `java.util.Random` (`--oracle jvm`; the lab model matches the live generator over random
+  states, so the attack is confirmed on the true target, not only the port), with a
+  uniqueness/coincidence certificate, a tamper-evident hash, self-verification
+  (`demonstrate --verify`), and a `seeded` kind that recovers a `new Random(seed)`
+  constructor seed (e.g. a creation timestamp). Intake proposed in
+  `docs/repoauditor-evidence-intake.md`; the Python detector (`weak_rng_py`) is built as an
+  additive plugin on a local repoauditor branch.
 - **risk-quant calibration:** the margin curve is a closed-form-checkable oracle to
   validate prediction-interval coverage (session G) before applying it to noisy data.
+  **Scoped 2026-09-09** as a repoauditor proposal (held branch
+  `risk-quant-calibration-proposal`, `docs/optimizations/opt-037-calibration-evidence.md`
+  there): lift `characterize/calibration.py` into an additive `analyze/calibration.py`,
+  self-test it on the lab's exact oracle, then apply it to triage's persisted
+  probabilities vs later labels and to the simulator's Monte Carlo quantiles vs their
+  analytic values.
 - **methodology note:** exact-vs-noisy leakage as the crisp instance of the
   parameter-vs-process uncertainty split (risk-quant session C).

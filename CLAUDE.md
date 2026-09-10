@@ -121,7 +121,16 @@ returned set; collisions surface as >1 candidate; feasibility refusals are expli
   scope governance. The DETECT half (`detect_in_source`) is built inside repoauditor
   against its live retrieval layer, using `adapt/contract.py` as the spec. The
   DEMONSTRATE half already reuses the validated `recover/roundoff` path, so the
-  fold-in inherits the passing vector.
+  fold-in inherits the passing vector. `prng-lattice-lab demonstrate` packages a
+  demonstration as a `DemonstrationArtifact` (schema-validated, reproducible, verified)
+  — the corroborating-evidence payload. Each artifact carries a uniqueness/coincidence
+  CERTIFICATE (false-match bound ~2^(-bits·held_out)), a tamper-evident `content_sha256`,
+  and its token `oracle`: `--oracle jvm` sources the observed tokens from a REAL OpenJDK
+  `java.util.Random` (`adapt/jvm_oracle.py`), so a passing artifact is evidence the lab's
+  model matches the real generator beyond the pinned vector (JDK optional; degrades to
+  `lab_model`, recorded). `demonstrate --verify FILE` re-checks tamper + re-runs. How
+  repoauditor takes an artifact in is proposed in `docs/repoauditor-evidence-intake.md`
+  (owner scoping, not built).
 - The adapter's job is the middle branch of the taxonomy: a *shared/predictable
   generator crossing a trust boundary*. That is invisible to SAST, dependency
   scanning, and CVE feeds — the whole reason it is worth adding.
@@ -184,6 +193,8 @@ prng-lattice-lab demo 7338710 7668738 5563335     # crack + predict next/prev
 prng-lattice-lab retro --total 20 --offset 10     # reconstruct a whole stream from one 3-token window
 prng-lattice-lab retro --total 30 --offset 12 --bound 255   # same for nextInt(odd) tokens (RandomStringUtils)
 prng-lattice-lab mt-demo --warmup 1000            # MT19937 contrast: clone stdlib random from 624 outputs
+prng-lattice-lab demonstrate nextint_odd --oracle jvm --out demo.json  # evidence artifact vs a REAL JVM (msb24|nextint_odd|seeded|mt19937)
+prng-lattice-lab demonstrate --verify demo.json   # re-verify a stored artifact (tamper + re-run)
 prng-lattice-lab leaks --bits 8                   # characterise the 3 leak models; confirm H3
 pytest -q                                         # correctness gate
 ```

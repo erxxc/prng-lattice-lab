@@ -5,4 +5,4 @@ Anchored on the Randar (Minecraft) truncated-LCG attack; generalised to a
 (bits-leaked-per-call x number-of-observations) phase diagram, with a fold-in
 path to repoauditor as a `weak_rng_adapter`.
 """
-__version__ = "0.2.0"
+__version__ = "0.3.0"

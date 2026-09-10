@@ -1,7 +1,5 @@
 # prng-lattice-lab
-<!-- TODO(after first Zenodo release via the GitHub-Zenodo webhook): replace with the
-     concept-DOI badge, chainwatch style:
-     [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.XXXXXXX.svg)](https://doi.org/10.5281/zenodo.XXXXXXX) -->
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22697184.svg)](https://doi.org/10.5281/zenodo.22697184)
 
 A closed, offline harness for characterising the recoverability boundary of
 `java.util.Random` under partial-state leakage. Anchored on the **Randar**
@@ -117,5 +115,5 @@ repository in Zenodo, publish a GitHub Release for the tag, and Zenodo archives 
 and mints two DOIs (concept + version), which are then backfilled here — the same flow as
 [chainwatch](https://github.com/erxxc/chainwatch).
 
-- **Concept DOI** (always resolves to the latest version): _minted at first release_
-- **v0.5.0 DOI** (this exact release, for reproducibility): _minted at first release_
+- **Concept DOI** (always resolves to the latest version): [10.5281/zenodo.22697184](https://doi.org/10.5281/zenodo.22697184)
+- **v0.5.0 DOI** (this exact release, for reproducibility): [10.5281/zenodo.22697185](https://doi.org/10.5281/zenodo.22697185)
